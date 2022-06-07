@@ -1,0 +1,264 @@
+﻿@page
+@model AuthModel
+@{
+	ViewBag.IsFullscreen = true;
+	ViewBag.Title = "Giriş Yap";
+}
+@functions {
+	public class AuthModel : PageBaseModel
+	{
+		public string PageHandler = "Login";
+
+		[BindProperty]
+		public string Username { get; set; }
+
+		[BindProperty]
+		public string Password { get; set; }
+
+		private IUserService mUserService;
+		private ILogService mLogService;
+
+		public AuthModel(
+			IUserService userService,
+			ILogService logService
+		)
+		{
+			mUserService = userService;
+			mLogService = logService;
+		}
+
+
+		public IActionResult OnGet()
+		{
+			return RedirectToPage("./auth", "login");
+		}
+
+		public void OnGetLogin()
+		{
+			PageHandler = "Login";
+			Username = HttpContext.Session.GetString("Username");
+		}
+
+		public IActionResult OnPostLogin()
+		{
+			PageHandler = "Login";
+			if (ModelState.IsValid)
+			{
+				var user = mUserService.GetUserByName(Username);
+
+				if (user == null || !(user.Id > 0))
+				{
+					TempData["Fail"] = "Kullanıcı bulunamadı.";
+					Log(Username, "Giriş", "Kullanıcı bulunamadı");
+					return Page();
+				}
+
+				if (user.LockoutEnabled && user.LockoutEndDate.HasValue)
+				{
+					var lockoutTimeMessage = "";
+					var lockoutEndMin = (int)(user.LockoutEndDate.Value - DateTime.Now).TotalMinutes;
+					var lockoutEndSec = (int)(user.LockoutEndDate.Value - DateTime.Now).TotalSeconds;
+
+					if (lockoutEndMin >= 1) lockoutTimeMessage = lockoutEndMin.ToString() + " dk içinde tekrar deneyiniz.";
+					else if (lockoutEndMin == 0 && lockoutEndSec > 0) lockoutTimeMessage = lockoutEndSec.ToString() + " sn içinde tekrar deneyiniz.";
+
+					if (lockoutEndSec > 0)
+					{
+						TempData["Fail"] = "Hesabınız kilitlendi. " + lockoutTimeMessage;
+						Log(Username, "Giriş", "Hesap kilitlendi");
+						return Page();
+					}
+					else
+					{
+						mUserService.Lockout(user.Username, false);
+					}
+				}
+
+				if(!user.IsActive)
+				{
+					TempData["Fail"] = "Hesabınız aktif değil.";
+					Log(Username, "Giriş", "Hesap aktif değil");
+					return Page();
+				}
+
+				if (!user.Password.Equals(Password))
+				{
+					TempData["Fail"] = "Kullanıcı adı veya şifre hatalı.";
+					mUserService.AccessFailed(user.Username);
+					Log(Username, "Giriş", "Hatalı şifre girildi");
+					return Page();
+				}
+				else
+				{
+					mUserService.Lockout(user.Username, false);
+
+					SignIn(user);
+					Log(user.Username, "Giriş", "Giriş yapıldı");
+					return RedirectToPage("/Index");
+				}
+			}
+			else
+			{
+				TempData["Fail"] = "Kullanıcı adı veya şifre hatalı.";
+				Log(Username, "Login", "Kullanıcı adı veya şifre hatalı");
+				return Page();
+			}
+		}
+
+		public async Task<IActionResult> OnGetLogoutAsync()
+		{
+			PageHandler = "Logout";
+			if (ModelState.IsValid)
+			{
+				Username = HttpContext.Session.GetString("Username");
+
+				Log(Username, "Çıkış", "Çıkış yapıldı");
+
+				HttpContext.Session.Clear();
+				await HttpContext.SignOutAsync();
+
+				return Page();
+			}
+			else
+			{
+				return RedirectToPage("Index");
+			}
+
+		}
+
+		private void SignIn(User user)
+		{
+			var roles = mUserService.GetUserRoles(user.Id);
+
+			var identity = new ClaimsIdentity(CookieAuthenticationDefaults.AuthenticationScheme, ClaimTypes.Name, ClaimTypes.Role);
+			identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()));
+			identity.AddClaim(new Claim(ClaimTypes.Name, user.Username));
+
+			if (roles != null && roles.Count > 0)
+			{
+				foreach (var role in roles)
+				{
+					identity.AddClaim(new Claim("Role", role.Name));
+				}
+			}
+
+			var principal = new ClaimsPrincipal(identity);
+
+			HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+		}
+
+		private void Log(string username, string page, string message)
+		{
+			if (string.IsNullOrEmpty(username))
+			{
+				try
+				{
+					username = HttpContext.User.Identity.Name;
+				}
+				catch (Exception) {}
+			}
+			try
+			{
+
+				var ipAddress = HttpContext.Connection.RemoteIpAddress.ToString();
+
+				mLogService.Add(new Log { Category = "Doğrulama", Title = page, Message = message, Username = username, IpAddress = ipAddress });
+			}
+			catch (Exception) { }
+		}
+	}
+}
+
+<div class="row w-100 mx-auto auth-page">
+	<div class="col-xl-3 col-lg-4 mx-auto">
+		<div class="auto-form-wrapper">
+            <div class="logo">
+                <img src="~/img/logo.png" alt="Akgünler" class="w-100 mb-5" />
+			</div>
+			<form method="post" asp-page-handler="login">
+				@Html.AntiForgeryToken()
+				<div class="form-group">
+					<label class="label">Kullanıcı Adı</label>
+					<div class="input-group">
+						<input asp-for="Username" type="text" class="form-control" placeholder="" autofocus="" />
+						<div class="input-group-append">
+							<span class="input-group-text"><i class="mdi mdi-check-circle-outline"></i></span>
+						</div>
+					</div>
+				</div>
+				<div class="form-group">
+					<label class="label">Şifre</label>
+					<div class="input-group">
+						<input asp-for="Password" type="password" class="form-control" placeholder="" />
+						<div class="input-group-append">
+							<span class="input-group-text"><i class="mdi mdi-check-circle-outline"></i></span>
+						</div>
+					</div>
+				</div>
+				<div class="form-group">
+					<button class="btn btn-primary submit-btn btn-block">Giriş Yap</button>
+				</div>
+				@*
+					<div class="form-group d-flex justify-content-between">
+						<div class="form-check form-check-flat mt-0">
+							<label class="form-check-label">
+								<input type="checkbox" class="form-check-input" checked="" />
+								Beni Hatırla
+							</label>
+						</div>
+						<a href="#" class="text-small forgot-password text-black">Şifremi Unuttum</a>
+					</div>
+				*@
+			</form>
+		</div>
+        <p class="footer-text text-center mt-4">@DateTime.Now.Year © Akgünler. <br /> Near East Technology tarafından geliştirildi.</p>
+	</div>
+</div>
+
+@if (Model.PageHandler == "Logout")
+{
+	<script type="text/javascript">
+		window.location.href = "/";
+	</script>
+}
+
+@if (TempData["Fail"] != null)
+{
+	<script type="text/javascript">
+		iziToast.show({
+			class: 'danger-toast',
+			icon: 'mdi mdi-close',
+			title: 'Hata!',
+			message: '@TempData["Fail"]',
+			titleColor: '#fff',
+			messageColor: '#fff',
+			iconColor: "#fff",
+			backgroundColor: '#FF7273',
+			progressBarColor: '#444F60',
+			position: 'topCenter',
+			transitionIn: 'fadeInDown',
+			close: false,
+			zindex: 99999,
+		});
+	</script>
+}
+@if (TempData["Success"] != null)
+{
+	<script type="text/javascript">
+		iziToast.show({
+			class: 'success-toast',
+			icon: 'mdi mdi-check',
+			title: 'Başarılı!',
+			message: '@TempData["Success"]',
+			titleColor: '#fff',
+			messageColor: '#fff',
+			iconColor: "#fff",
+			backgroundColor: '#00b289',
+			progressBarColor: '#444F60',
+			position: 'topRight',
+			transitionIn: 'fadeInDown',
+			close: false,
+			zindex: 99999,
+		});
+	</script>
+}

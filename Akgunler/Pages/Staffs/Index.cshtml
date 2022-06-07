@@ -1,0 +1,141 @@
+﻿@page
+@model IndexModel
+@{
+	ViewData["Title"] = "Müşteriler";
+}
+
+@functions {
+	public class IndexModel : PageBaseModel
+	{
+		public List<Staff> Staffs;
+
+		private readonly IRepository<Staff> mStaffRepository;
+		private readonly IRepository<Language> mLanguageRepository;
+
+		public IndexModel(
+			IRepository<Staff> staffRepository,
+			IRepository<Language> languageRepository
+		) {
+			mStaffRepository = staffRepository;
+			mLanguageRepository = languageRepository;
+		}
+
+		public IActionResult OnGet()
+		{
+			var languages = mLanguageRepository.Query().ToList();
+
+			Staffs = mStaffRepository.Query()
+				.Include(x => x.Department)
+				.Include(x => x.DriversLicenseType)
+				.Include(x => x.Nationality)
+				.Include(x => x.UserRole).ThenInclude(x => x.Role)
+				.Where(x => x.DeletedOn == null)
+				.ToList();
+
+			foreach (var staff in Staffs)
+			{
+				var langs = languages.Where(x => staff.ForeignLangs.Contains(x.Id.ToString())).Select(x => x.Name);
+				staff.ForeignLangs = string.Join(", ", langs);
+			}
+
+			return Page();
+		}
+
+		[HttpGet]
+        public IActionResult OnGetStaffs(DataSourceLoadOptions loadOptions) {
+			var languages = mLanguageRepository.Query().ToList();
+
+			var staffs = mStaffRepository.Query()
+				.Include(x => x.Department)
+				.Include(x => x.DriversLicenseType)
+				.Include(x => x.Nationality)
+				.Include(x => x.UserRole).ThenInclude(x => x.Role)
+				.Where(x => x.DeletedOn == null)
+				.ToList();
+
+			foreach (var staff in staffs)
+			{
+				var langs = languages.Where(x => staff.ForeignLangs.Contains(x.Id.ToString())).Select(x => x.Name);
+				staff.ForeignLangs = string.Join(", ", langs);
+			}
+
+            return new OkObjectResult(DataSourceLoader.Load(staffs, loadOptions));
+        }
+	}
+}
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center">
+					<h4 class="card-title mb-0">Personeller</h4>
+					<a class="btn btn-light btn-sm" asp-page="./edit">Yeni Ekle</a>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+@(Html.DevExtreme().DataGrid<Staff>()
+    .DataSource(d => d.Mvc().Controller("Index").LoadParams(new { Handler = "Staffs" }).Key("Id"))
+    .RemoteOperations(true)
+    .Columns(columns => {
+
+        columns.AddFor(m => m.Id)
+			.SortOrder(SortOrder.Desc)
+			.Alignment(HorizontalAlignment.Left)
+			.Width(60)
+			.Caption("Id");
+
+        columns.AddFor(m => m.FirstName)
+			.Caption("Adı");
+
+        columns.AddFor(m => m.LastName)
+			.Caption("Soyadı");
+
+        columns.AddFor(m => m.Department.Name)
+			.Caption("Departman");
+
+        columns.AddFor(m => m.ForeignLangs)
+			.Caption("Yabancı Dil");
+
+        columns.AddFor(m => m.DriversLicenseType.Name)
+			.Caption("Ehliyet");
+
+        columns.AddFor(m => m.UserRole.Role.Name)
+			.Caption("Yetki");
+
+        columns.AddFor(m => m.IsActive)
+			.FalseText("Pasif")
+			.TrueText("Aktif")
+			.Caption("Durum");
+    })
+    .FilterRow(f => f.Visible(true))
+    .HeaderFilter(f => f.Visible(false))
+    .GroupPanel(p => p.Visible(false))
+    .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+	.Paging(paging => paging.PageSize(10))
+    .Pager(pager => {
+        pager.Visible(true);
+        pager.ShowPageSizeSelector(true);
+        pager.AllowedPageSizes(new JS("[10, 20, 50]"));
+        pager.ShowNavigationButtons(true);
+    })
+	.Selection(s => s.Mode(SelectionMode.Single))
+    .HoverStateEnabled(true)
+    .ShowBorders(true)
+	.ShowRowLines(true)
+    .Grouping(g => g.AutoExpandAll(false))
+	.OnSelectionChanged("onSelectionChanged")
+	.NoDataText("Veri bulunamadı")
+)
+
+<script>
+    function onSelectionChanged(selectedItems) {
+        var data = selectedItems.selectedRowsData[0];
+        if(data) {
+			window.location.href = baseUrl + "staffs/edit?id=" + data.Id;
+        }
+    }
+</script>

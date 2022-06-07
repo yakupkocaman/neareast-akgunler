@@ -1,0 +1,1069 @@
+﻿@page
+@model EditModel
+
+@{
+	ViewData["Title"] = "Görev Düzenle";
+	Layout = "~/Pages/Shared/_Layout.cshtml";
+}
+
+@functions
+{
+	public class EditModel : PageBaseModel
+	{
+		[BindProperty]
+		public Job Job { get; set; }
+		public int CurrentJobId;
+
+		public List<Customer> Customers;
+		public List<JobStaff> JobStaffs;
+		public List<Freight> Freights;
+		public List<Account> Accounts;
+
+		public JobStaffModel JobStaffModel = new JobStaffModel();
+		public FreightModel FreightModel = new FreightModel();
+		public AccountModel AccountModel = new AccountModel();
+
+		private readonly IJobService mJobService;
+		private readonly IJobStaffService mJobStaffService;
+		private readonly IFreightService mFreightService;
+		private readonly IAccountService mAccountService;
+		private readonly IStaffService mStaffService;
+		private readonly IAddressService mAddressService;
+		private readonly IRepository<Currency> mCurrencyRepository;
+		private readonly IRepository<AccountType> mAccountTypeRepository;
+		private readonly IRepository<Vehicle> mVehicleRepository;
+		private readonly IRepository<Customer> mCustomerRepository;
+		private readonly IRepository<Job> mJobRepository;
+		private readonly IRepository<JobType> mJobTypeRepository;
+		private readonly IRepository<Staff> mStaffRepository;
+		private readonly IRepository<Language> mLanguageRepository;
+		private readonly IRepository<Port> mPortRepository;
+		private readonly IRepository<Ship> mShipRepository;
+		private readonly IRepository<Customs> mCustomsRepository;
+
+		public EditModel(
+			IJobService jobService,
+			IJobStaffService jobStaffService,
+			IFreightService freightService,
+			IAccountService accountService,
+			IStaffService staffService,
+			IAddressService addressService,
+			IRepository<Currency> currencyRepository,
+			IRepository<AccountType> accountTypeRepository,
+			IRepository<Vehicle> vehicleRepository,
+			IRepository<Customer> customerRepository,
+			IRepository<Job> jobRepository,
+			IRepository<JobType> jobTypeRepository,
+			IRepository<Staff> staffRepository,
+			IRepository<Language> languageRepository,
+			IRepository<Port> portRepository,
+			IRepository<Ship> shipRepository,
+			IRepository<Customs> customsRepository
+		)
+		{
+			mJobService = jobService;
+			mJobStaffService = jobStaffService;
+			mFreightService = freightService;
+			mAccountService = accountService;
+			mStaffService = staffService;
+			mAddressService = addressService;
+			mCurrencyRepository = currencyRepository;
+			mAccountTypeRepository = accountTypeRepository;
+			mVehicleRepository = vehicleRepository;
+			mCustomerRepository = customerRepository;
+			mJobRepository = jobRepository;
+			mJobTypeRepository = jobTypeRepository;
+			mStaffRepository = staffRepository;
+			mLanguageRepository = languageRepository;
+			mPortRepository = portRepository;
+			mShipRepository = shipRepository;
+			mCustomsRepository = customsRepository;
+		}
+
+		public IActionResult OnGet(int? id)
+		{
+			if (id.HasValue)
+			{
+				CurrentJobId = id.Value;
+				JobStaffModel.JobId = CurrentJobId;
+				FreightModel.JobId = CurrentJobId;
+				AccountModel.JobId = CurrentJobId;
+
+				Job = mJobService.GetFull(CurrentJobId);
+
+				if (Job == null)
+				{
+					return NotFound();
+				}
+				else
+				{
+					JobStaffs = mJobStaffService.GetByJobId(CurrentJobId);
+					Freights = mFreightService.GetByJobId(CurrentJobId);
+					Accounts = mAccountService.GetByJobId(CurrentJobId);
+				}
+			}
+			else
+			{
+				Job = new Job { JobTypeId = 1 };
+			}
+
+			/*
+			if (Job != null && (Job.ExchangeRateUsd == 0 || Job.ExchangeRateEur == 0))
+			{
+				dynamic rates = LoadExchange();
+				Job.ExchangeRateUsd = rates.Usd;
+				Job.ExchangeRateEur = rates.Eur;
+			}
+			*/
+
+			LoadPageData();
+			return Page();
+		}
+
+		public IActionResult OnPost(int? id)
+		{
+			if (!ModelState.IsValid)
+			{
+				SetFlashMessage(ModelState);
+
+				LoadPageData();
+				return Page();
+			}
+			if (id.HasValue)
+			{
+				CurrentJobId = id.Value;
+				Job.Id = id.Value;
+
+				var canUpdate = mJobService.CheckVersion(Job.Id, Job.RowVersion);
+				if (!canUpdate)
+				{
+					LoadPageData();
+					SetFlashMessage("Bu görev sistem tarafından güncellendi. Lütfen görev listesinden bu göreve yeniden ulaşın.");
+				}
+				else 
+				{
+					mJobService.Update(Job);
+					SetFlashMessage("Görev başarıyla güncellendi", "success");
+
+					return RedirectToPage("./Index");
+				}
+			}
+			else
+			{
+				mJobService.Insert(Job);
+
+				SetFlashMessage("Görev başarıyla kaydedildi", "success");
+
+				if (Job.Id > 0)
+				{
+					return RedirectToPage("./Edit", new { id = Job.Id });
+				}
+			}
+
+			return Page();
+		}
+
+		public IActionResult OnPostDelete(int? id)
+		{
+			if (id == null)
+			{
+				return NotFound();
+			}
+
+			Job = Job.Get<Job>(id.Value);
+			Job.DeletedOn = DateTime.Now;
+
+			mJobService.Update(Job);
+
+			SetFlashMessage("Görev başarıyla silindi.", "success");
+
+			if (Job != null)
+			{
+				return RedirectToPage("./Index");
+			}
+
+			return Page();
+		}
+
+		public IActionResult OnGetVehicles(DataSourceLoadOptions loadOptions, string type)
+		{
+			var vehicles = mVehicleRepository.Query()
+				.Include(x => x.VehicleType)
+				.Include(x => x.VehicleGroup)
+				.Include(x => x.Color)
+				.Include(x => x.Make)
+				.Include(x => x.Transmission)
+				.Include(x => x.Fuel)
+				.Where(x => x.DeletedOn == null)
+				.ToList();
+
+			var uncompletedJobs = mJobRepository.Query()
+				.Where(x => x.Status != "Tamamlandı")
+				.Include(x => x.JobStaffs).ThenInclude(x => x.Tractor)
+				.Include(x => x.JobStaffs).ThenInclude(x => x.Trailer)
+				.ToList();
+
+			var inUseVehicleIds = uncompletedJobs.SelectMany(x => x.JobStaffs.Select(x => x.Trailer))
+				.Concat(uncompletedJobs.SelectMany(x => x.JobStaffs.Select(x => x.Tractor)))
+				.Select(x => x.Id)
+				.ToList();
+
+			vehicles = vehicles.Where(x => !inUseVehicleIds.Where(y => y == x.Id).Any()).ToList();
+
+			if(!string.IsNullOrEmpty(type)) {
+				vehicles = vehicles.Where(x => x.VehicleGroup.Name == (type == "Tractor" ? "Çekici" : "Dorse")).ToList();
+			}
+
+			return new OkObjectResult(DataSourceLoader.Load(vehicles, loadOptions));
+		}
+
+		public IActionResult OnGetStaffs(DataSourceLoadOptions loadOptions)
+		{
+			var languages = mLanguageRepository.Query().ToList();
+			var staffs = mStaffService.GetAllFull();
+
+			var inUseStaffIds = mJobRepository.Query()
+				.Where(x => x.Status != "Tamamlandı")
+				.Include(x => x.JobStaffs).ThenInclude(x => x.Staff)
+				.SelectMany(x => x.JobStaffs.Select(x => x.Staff))
+				.Select(x => x.Id)
+				.ToList();
+			
+			staffs = staffs.Where(x => !inUseStaffIds.Where(y => y == x.Id).Any()).ToList();
+			
+			foreach (var staff in staffs)
+			{
+				var langs = languages.Where(x => staff.ForeignLangs.Contains(x.Id.ToString())).Select(x => x.Name);
+				staff.ForeignLangs = string.Join(", ", langs);
+			}
+
+			return new OkObjectResult(DataSourceLoader.Load(staffs, loadOptions));
+		}
+
+		public JobStaffModel GetJobStaffModel(int jobId, JobStaff jobStaff)
+		{
+			var jobStaffModel = new JobStaffModel();
+			jobStaffModel.JobStaffId = jobStaff.Id;
+			jobStaffModel.StaffId = jobStaff.StaffId;
+			jobStaffModel.TractorId = jobStaff.TractorId;
+			jobStaffModel.TrailerId = jobStaff.TrailerId;
+
+			jobStaffModel.JobId = jobStaff.JobId;
+
+			return jobStaffModel;
+		}
+
+		public FreightModel GetFreightModel(int jobId, Freight freight)
+		{
+			var freightModel = new FreightModel();
+			freightModel.FreightId = freight.Id;
+			freightModel.Title = freight.Title;
+			freightModel.Type = freight.Type;
+			freightModel.ShippingAddressLine = freight.ShippingAddressLine;
+			freightModel.ShippingDistrictId = freight.ShippingDistrictId;
+			freightModel.ShippingProvinceId = freight.ShippingDistrict?.ProvinceId;
+			freightModel.ShippingCountryId = freight.ShippingDistrict?.Province?.CountryId;
+            freightModel.DeliveryAddressLine = freight.DeliveryAddressLine;
+            freightModel.DeliveryDistrictId = freight.DeliveryDistrictId;
+            freightModel.DeliveryProvinceId = freight.DeliveryDistrict?.ProvinceId;
+            freightModel.DeliveryCountryId = freight.DeliveryDistrict?.Province?.CountryId;
+			freightModel.IsDomesticShipping = freight.IsDomesticShipping;
+			freightModel.DomesticShippingPrice = freight.DomesticShippingPrice;
+			freightModel.Note = freight.Note;
+
+			freightModel.JobId = jobId;
+
+			return freightModel;
+		}
+
+		public AccountModel GetAccountModel(int jobId, Account account)
+		{
+			var accountModel = new AccountModel();
+			accountModel.AccountId = account.Id;
+			accountModel.AccountTypeId = account.AccountTypeId;
+			accountModel.CurrencyId = account.CurrencyId;
+			accountModel.Debit = account.Debit;
+			accountModel.Credit = account.Credit;
+			accountModel.Date = account.Date;
+			accountModel.Note = account.Note;
+
+			accountModel.JobId = jobId;
+			accountModel.Currencies = AccountModel.Currencies;
+			accountModel.AccountTypes = AccountModel.AccountTypes;
+
+			return accountModel;
+		}
+
+		private void LoadPageData()
+		{
+			AccountModel.Currencies = mCurrencyRepository.Query().ToList();
+			AccountModel.AccountTypes = mAccountTypeRepository.Query().ToList();
+
+			var ports = mPortRepository.Query().OrderBy(x => x.Name).ToList();
+			var ships = mShipRepository.Query().OrderBy(x => x.Name).ToList();
+			var customs = mCustomsRepository.Query().OrderBy(x => x.Name).ToList();
+			var jobTypes = mJobTypeRepository.Query().OrderBy(x => x.Name).ToList();
+			var customers = mCustomerRepository.Query();
+
+			ViewData["Customers"] = new SelectList(customers, "Id", "Name");
+			ViewData["Ports"] = new SelectList(ports, "Id", "Name");
+			ViewData["Ships"] = new SelectList(ships, "Id", "Name");
+			ViewData["Customs"] = new SelectList(customs, "Id", "Name");
+			ViewData["JobTypes"] = new SelectList(jobTypes, "Id", "Name");
+
+			var statuses = new []
+			{
+				new { Name = "Beklemede" },
+				new { Name = "Tamamlandı" },
+				new { Name = "İptal" },
+				new { Name = "Gidiş" },
+				new { Name = "Gidiş - Liman 1" },
+				new { Name = "Gidiş - Gemi" },
+				new { Name = "Gidiş - Liman 2" },
+				new { Name = "Gidiş - Yol" },
+				new { Name = "Adres - 1" },
+				new { Name = "Adres - 2" },
+				new { Name = "Adres - 3" },
+				new { Name = "Dönüş" },
+				new { Name = "Dönüş - Gümrük" },
+				new { Name = "Dönüş - Yol" },
+				new { Name = "Dönüş - Liman 1" },
+				new { Name = "Dönüş - Liman 2" },
+				new { Name = "Adres - Teslimat" },
+			};
+
+			ViewData["JobStatuses"] = new SelectList(statuses, "Name", "Name");
+			
+		}
+
+		private object LoadExchange()
+		{
+			try
+			{
+				string today = "http://www.tcmb.gov.tr/kurlar/today.xml";
+				var xmlDoc = new System.Xml.XmlDocument();
+				xmlDoc.Load(today);
+
+				string usd = xmlDoc.SelectSingleNode("Tarih_Date/Currency[@Kod='USD']/BanknoteSelling").InnerXml;
+				string eur = xmlDoc.SelectSingleNode("Tarih_Date/Currency[@Kod='EUR']/BanknoteSelling").InnerXml;
+				return new { Usd = decimal.Parse(usd), Eur = decimal.Parse(eur) };
+			}
+			catch (Exception)
+			{
+				return new { Usd = 0, Eur = 0 };
+			}
+		}
+	}
+}
+
+@if (Model.Job.IsCancelled)
+{
+	<div class="row">
+		<div class="col-12">
+			<div class="alert alert-danger" role="alert">
+				Bu işlem iptal edildi.
+			</div>
+		</div>
+	</div>
+}
+
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center mb-3">
+					<h4 class="card-title mb-0">@(Model.Job.Id > 0 ? "Görev Düzenle" : "Yeni Görev")</h4>
+					<div>
+						@if (!Model.Job.IsCancelled)
+						{
+							<button id="save-btn" class="btn btn-primary btn-sm" onclick="saveJob()">Kaydet</button>
+						}
+						@if (Model.Job.Id > 0)
+						{
+							<button class="btn btn-danger btn-sm" onclick="removeJob()">Sil</button>
+						}
+						<a class="btn btn-light btn-sm d-none d-md-inline-block" asp-page="./index">Listeye Dön</a>
+						<div id="save-btn-tooltip" style="display: none;">
+							Transferi onaylamak için kaydedin.
+						</div>
+					</div>
+				</div>
+				<div>
+					<form method="post" id="remove-job-form" asp-page-handler="Delete" asp-route-id="@Model.Job.Id"></form>
+					<form method="post" id="create-job-form">
+						@(Html.DevExtreme().Form<Job>().ReadOnly(Model.Job.IsCancelled)
+							.Items(items =>
+							{
+								items.AddSimpleFor(m => m.RowVersion).CssClass("hidden-input");
+								items.AddSimpleFor(m => m.TransferTypeId).CssClass("hidden-input");
+								items.AddGroup()
+									.ColCount(2)
+									.Items(groupItems =>
+									{
+
+										groupItems.AddGroup().ColSpan(2).ColCount(2).Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.JobTypeId)
+												.Editor(e => e
+													.SelectBox()
+													.Placeholder("Seçiniz")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.Value(@Model.Job?.JobTypeId.ToString())
+													.DataSource(ViewBag.JobTypes))
+													.IsRequired(false)
+													.Label(m => m.Text("Görev Tipi"));
+
+											secondGroupItems.AddSimpleFor(m => m.Status)
+												.Editor(e => e
+													.SelectBox()
+													.Placeholder("Seçiniz")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.Value(@Model.Job?.Status)
+													.DataSource(ViewBag.JobStatuses))
+													.IsRequired(false)
+													.Label(m => m.Text("Durum"));
+
+											secondGroupItems.AddSimpleFor(m => m.SenderId)
+												.Editor(e => e
+													.SelectBox()
+													.Placeholder("Seçiniz")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.Value(@Model.Job?.SenderId.ToString())
+													.SearchEnabled(true)
+													.DataSource(ViewBag.Customers))
+													.IsRequired(false)
+													.Label(m => m.Text("Gönderen"));
+
+											secondGroupItems.AddSimpleFor(m => m.ReceiverId)
+												.Editor(e => e
+													.SelectBox()
+													.Placeholder("Seçiniz")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.Value(@Model.Job?.ReceiverId?.ToString())
+													.SearchEnabled(true)
+													.DataSource(ViewBag.Customers))
+													.IsRequired(false)
+													.Label(m => m.Text("Alıcı"));
+										});
+
+										groupItems.AddGroup().ColSpan(2).ColCount(2).Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.DeparturePortId)
+												.Editor(e => e
+													.SelectBox()
+													.Placeholder("Seçiniz")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.Value(@Model.Job?.DeparturePortId?.ToString())
+													.SearchEnabled(true)
+													.DataSource(ViewBag.Ports))
+													.IsRequired(false)
+													.Label(m => m.Text("Çıkış Limanı"));
+
+											secondGroupItems.AddSimpleFor(m => m.ArrivalPortId)
+												.Editor(e => e
+													.SelectBox()
+													.Placeholder("Seçiniz")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.Value(@Model.Job?.ArrivalPortId?.ToString())
+													.SearchEnabled(true)
+													.DataSource(ViewBag.Ports))
+													.IsRequired(false)
+													.Label(m => m.Text("Varış Limanı"));
+										});
+
+										groupItems.AddGroup().ColSpan(2).ColCount(2).Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.DepartureShipId)
+												.Editor(e => e
+													.SelectBox()
+													.Placeholder("Seçiniz")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.Value(@Model.Job?.DepartureShipId?.ToString())
+													.SearchEnabled(true)
+													.DataSource(ViewBag.Ships))
+													.IsRequired(false)
+													.Label(m => m.Text("Gidiş Gemi"));
+
+											secondGroupItems.AddSimpleFor(m => m.ArrivalShipId)
+												.Editor(e => e
+													.SelectBox()
+													.Placeholder("Seçiniz")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.Value(@Model.Job?.ArrivalShipId?.ToString())
+													.SearchEnabled(true)
+													.DataSource(ViewBag.Ships))
+													.IsRequired(false)
+													.Label(m => m.Text("Dönüş Gemi"));
+										});
+
+										groupItems.AddGroup().ColSpan(2).ColCount(2).Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.CustomsId)
+												.Editor(e => e
+													.SelectBox()
+													.Placeholder("Seçiniz")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.Value(@Model.Job?.CustomsId?.ToString())
+													.SearchEnabled(true)
+													.DataSource(ViewBag.Customs))
+													.IsRequired(false)
+													.Label(m => m.Text("Gümrük"));
+
+										});
+
+										groupItems.AddGroup().ColSpan(2).ColCount(2).Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.StartDate)
+												.Editor(e => e
+												.DateBox()
+												.DisplayFormat("dd/MM/yyyy HH:mm")
+												.Type(DateBoxType.DateTime)
+												.Width("100%"))
+												.Label(m => m.Text("Başlangıç Tarihi")).IsRequired(false);
+
+											secondGroupItems.AddSimpleFor(m => m.FinishDate)
+												.Editor(e => e
+												.DateBox()
+												.DisplayFormat("dd/MM/yyyy HH:mm")
+												.Type(DateBoxType.DateTime)
+												.Width("100%"))
+												.Label(m => m.Text("Bitiş Tarihi")).IsRequired(false);
+										});
+
+
+
+										groupItems.AddGroup().ColSpan(2).Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.Note)
+												.Editor(editor => editor.TextArea().Height(84))
+												.Label(m => m.Text("Açıklama")).IsRequired(false);
+										});
+
+										groupItems.AddGroup().ColCount(4).ColSpan(2).Items(secondGroupItems =>
+										{
+
+											secondGroupItems.AddSimpleFor(m => m.IsActive)
+													.Editor(e => e
+														.Switch()
+														.Width(80)
+														.SwitchedOnText("Aktif")
+														.SwitchedOffText("Pasif"))
+														.Label(m => m.Text("Durum"));
+
+										});
+									});
+							})
+						.FormData(Model.Job)
+						)
+
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="table-responsive">
+				<table class="table center-aligned-table">
+					<thead>
+						<tr class="bg-light">
+							<th class="border-bottom-0">Sürücü</th>
+							<th class="border-bottom-0">Çekici</th>
+							<th class="border-bottom-0">Dorse</th>
+							<th class="border-bottom-0 table-icon-btn-col" width="60">
+								@if (!Model.Job.IsCancelled && Model.JobStaffs != null && Model.JobStaffs.Count < 1)
+								{
+									<i onclick="showJobStaffForm(0)" class="table-icon-btn mdi mdi-plus-box"></i>
+								}
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						@if (Model.JobStaffs != null)
+						{
+							foreach (var jobStaff in Model.JobStaffs)
+							{
+								<tr>
+									<td>@jobStaff.Staff.FullName <span style="color: #989898;"> < @jobStaff.Staff?.Department?.Name @jobStaff.Staff?.Phone1 > </span></td>
+									<td>@jobStaff.Tractor.RegistrationNo <span style="color: #989898;"> < @jobStaff.Tractor?.Make?.Name @jobStaff.Tractor?.Model @jobStaff.Tractor?.ModelYear @jobStaff.Tractor?.Color?.Name > </span></td>
+									<td>@jobStaff.Trailer.RegistrationNo <span style="color: #989898;"> < @jobStaff.Trailer?.VehicleType?.Name @jobStaff.Trailer?.Make?.Name @jobStaff.Trailer?.Model @jobStaff.Trailer?.ModelYear @jobStaff.Trailer?.Color?.Name > </span></td>
+									<td class="table-icon-btn-col">
+										<i onclick="showJobStaffForm(@jobStaff.Id)" class="table-icon-btn mdi mdi-pencil-box-outline"></i>
+
+										@using (Html.DevExtreme().NamedTemplate("jobstaff-template-" + jobStaff.Id))
+										{
+											<div class="job-popup-content">
+												<partial name="Partials/Jobs/JobStaffForm" model="Model.GetJobStaffModel(Model.Job.Id, jobStaff)" />
+											</div>
+										}
+									</td>
+								</tr>
+							}
+
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="table-responsive">
+				<table class="table center-aligned-table">
+					<thead>
+						<tr class="bg-light">
+							<th class="border-bottom-0">Yük</th>
+							<th class="border-bottom-0">Tür</th>
+							<th class="border-bottom-0">Yükleme Adresi</th>
+							<th class="border-bottom-0">Teslimat Adresi</th>
+							<th class="border-bottom-0">Not</th>
+							<th class="border-bottom-0 table-icon-btn-col" width="60">
+								@if (!Model.Job.IsCancelled)
+								{
+									<i onclick="showFreightForm(0)" class="table-icon-btn mdi mdi-plus-box"></i>
+								}
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						@if (Model.Freights != null)
+						{
+							foreach (var freight in Model.Freights)
+							{
+								<tr>
+									<td>@freight.Title @if (freight.IsDomesticShipping) { <span style="color: #989898;"> (İç Nakliye) </span> }</td>
+									<td>@freight.Type</td>
+									<td>@freight.ShippingAddressLine @freight.ShippingDistrict?.Name @freight.ShippingDistrict?.Province?.Name</td>
+									<td>@freight.DeliveryAddressLine @freight.DeliveryDistrict?.Name @freight.DeliveryDistrict?.Province?.Name</td>
+									<td>@freight.Note</td>
+									<td class="table-icon-btn-col">
+										<i onclick="showFreightForm(@freight.Id)" class="table-icon-btn mdi mdi-pencil-box-outline"></i>
+
+										@using (Html.DevExtreme().NamedTemplate("freight-template-" + freight.Id))
+										{
+											<div class="job-popup-content">
+												<partial name="Partials/Jobs/FreightForm" model="Model.GetFreightModel(Model.Job.Id, freight)" />
+											</div>
+										}
+									</td>
+								</tr>
+							}
+
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>
+
+@*
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="table-responsive">
+				<table class="table center-aligned-table">
+					<thead>
+						<tr class="bg-light">
+							<th class="border-bottom-0">FişNo</th>
+							<th class="border-bottom-0">Tarih</th>
+							<th class="border-bottom-0">İşlem</th>
+							<th class="border-bottom-0">Açıklama</th>
+							<th class="border-bottom-0">Borç</th>
+							<th class="border-bottom-0">Alacak</th>
+							<th class="border-bottom-0">Bakiye</th>
+							<th class="border-bottom-0">Birim</th>
+							<th class="border-bottom-0 table-icon-btn-col" width="60">
+								@if (!Model.Job.IsCancelled)
+								{
+									<i onclick="showAccountForm(0)" class="table-icon-btn mdi mdi-plus-box"></i>
+								}
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						@if (Model.Accounts != null)
+						{
+							foreach (var account in Model.Accounts)
+							{
+								<tr>
+									<td>@account.Id</td>
+									<td>@account.Date.ToString("dd/MM/yyyy")</td>
+									<td>@account.AccountType?.Name</td>
+									<td>@account.Note</td>
+									<td>@account.Debit</td>
+									<td>@account.Credit</td>
+									<td>0</td>
+									<td>@account.Currency?.Name</td>
+									<td class="table-icon-btn-col">
+										<i onclick="showAccountForm(@account.Id)" class="table-icon-btn mdi mdi-pencil-box-outline"></i>
+
+										@using (Html.DevExtreme().NamedTemplate("account-template-" + account.Id))
+										{
+											<div class="job-popup-content">
+												<partial name="Partials/Jobs/AccountForm" model="Model.GetAccountModel(Model.Job.Id, account)" />
+											</div>
+										}
+									</td>
+								</tr>
+							}
+
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>
+*@
+
+<div id="popup">
+	@(Html.DevExtreme().Popup()
+		.ID("job-popup")
+		.ElementAttr("class", "popup")
+		.Width("auto")
+		.MaxWidth(800)
+		.Height("auto")
+		.ShowTitle(true)
+		.Title("-----------------------------------")
+		.Visible(false)
+		.DragEnabled(false)
+		.CloseOnOutsideClick(false)
+	)
+
+	@using (Html.DevExtreme().NamedTemplate("jobstaff-template-0"))
+	{
+		<div class="job-popup-content">
+			<partial name="Partials/Jobs/JobStaffForm" model="Model.JobStaffModel" />
+		</div>
+	}
+
+	@using (Html.DevExtreme().NamedTemplate("freight-template-0"))
+	{
+		<div class="job-popup-content">
+			<partial name="Partials/Jobs/FreightForm" model="Model.FreightModel" />
+		</div>
+	}
+
+	@using (Html.DevExtreme().NamedTemplate("account-template-0"))
+	{
+		<div class="job-popup-content">
+			<partial name="Partials/Jobs/AccountForm" model="Model.AccountModel" />
+		</div>
+	}
+
+	<script type="text/javascript">
+		function showJobStaffForm(id) {
+		updateEmbededDataGridValues(id);
+		showPopup('jobstaff', 'Araç-Sürücü ' + (id == 0 ? 'Ekle' : 'Düzenle'), id);
+	}
+
+	function showFreightForm(id) {
+		showPopup('freight', 'Yük ' + (id == 0 ? 'Ekle' : 'Düzenle'), id);
+	}
+
+	function showAccountForm(id) {
+		showPopup('account', 'Hesap Ekstresi ' + (id == 0 ? 'Ekle' : 'Düzenle'), id);
+	}
+
+	function showPopup(type, title, id) {
+		var jobId = @(Model.Job != null && Model.Job.Id > 0 ? Model.Job.Id : 0);
+		if (jobId == 0) {
+			swal("Uyarı", title.substr(0,1) + title.substr(1).toLocaleLowerCase() +"mek için görevi kaydetmeniz gerekmekedir.", "warning");
+			return;
+		}
+		var popup = $("#job-popup").dxPopup("instance");
+		popup.option("contentTemplate", $("#" + type + "-template-" + id));
+		popup.show();
+
+				$('.dx-toolbar-label .dx-item-content').text(title);
+				$(".job-popup-content").find('*[data-action="close"]').click(function () { popup.hide(); });
+	}
+
+	function updateEmbededDataGridValues(id) {
+		setTimeout(function () {
+				$('input[name="StaffId"]').next().find('input').val(selectedStaffs[id]);
+				$('input[name="TractorId"]').next().find('input').val(selectedTractors[id]);
+				$('input[name="TrailerId"]').next().find('input').val(selectedTrailers[id]);
+		}, 300);
+	}
+	</script>
+</div>
+
+@using (Html.DevExtreme().NamedTemplate("EmbeddedStaffDataGrid"))
+{
+	@(Html.DevExtreme().DataGrid()
+		.ID("embedded-staff-datagrid")
+		.ColumnHidingEnabled(true)
+		.DataSource(new JS(@"component.option(""dataSource"")"))
+		.Columns(columns =>
+		{
+			columns.Add().DataField("FirstName").Caption("Ad");
+			columns.Add().DataField("LastName").Caption("Soyad");
+			columns.Add().DataField("Phone1").Caption("Telefon 1");
+			columns.Add().DataField("Phone2").Caption("Telefon 2");
+			columns.Add().DataField("Department.Name").Caption("Departman");
+			columns.Add().DataField("ForeignLangs").Caption("Yabancı Dil");
+		})
+		.HoverStateEnabled(true)
+		.Paging(p => p.PageSize(10))
+		.Sorting(s => s.Mode(GridSortingMode.None))
+		.FilterRow(f => f.Visible(false))
+		.SearchPanel(searchPanel => searchPanel
+			.Visible(true)
+			.Placeholder("Sürücü Ara...")
+		)
+		.Scrolling(s => s.Mode(GridScrollingMode.Infinite))
+		.Height(345)
+		.Selection(s => s.Mode(SelectionMode.Single))
+		.SelectedRowKeys(new JS(@"[component.option(""StaffId"")]"))
+		.OnSelectionChanged(@<text>
+			function(selectedItems) {
+			if(selectedItems === undefined || selectedItems.selectedRowKeys === undefined || selectedItems.selectedRowKeys.length == 0) return;
+			var keys = selectedItems.selectedRowKeys;
+			component.option("value", keys);
+			}
+		</text>)
+	)
+}
+
+@using (Html.DevExtreme().NamedTemplate("EmbeddedVehicleTractorDataGrid"))
+{
+	@(Html.DevExtreme().DataGrid()
+		.ID("embedded-vehicle-tractor-datagrid")
+		.ColumnHidingEnabled(true)
+		.DataSource(new JS(@"component.option(""dataSource"")"))
+		.Columns(columns =>
+		{
+			columns.Add().DataField("RegistrationNo").Caption("Plaka");
+			columns.Add().DataField("Make.Name").Caption("Marka");
+			columns.Add().DataField("Model").Caption("Model");
+			columns.Add().DataField("ModelYear").Caption("Yıl");
+		})
+		.HoverStateEnabled(true)
+		.Paging(p => p.PageSize(10))
+		.Sorting(s => s.Mode(GridSortingMode.None))
+		.FilterRow(f => f.Visible(false))
+		.SearchPanel(searchPanel => searchPanel
+			.Visible(true)
+			.Placeholder("Araç Ara...")
+		)
+		.Scrolling(s => s.Mode(GridScrollingMode.Infinite))
+		.Height(345)
+		.Selection(s => s.Mode(SelectionMode.Single))
+		.SelectedRowKeys(new JS(@"[component.option(""TractorId"")]"))
+		.OnSelectionChanged(@<text>
+			function(selectedItems) {
+			if(selectedItems === undefined || selectedItems.selectedRowKeys === undefined || selectedItems.selectedRowKeys.length == 0) return;
+			var keys = selectedItems.selectedRowKeys;
+			component.option("value", keys);
+			}
+		</text>)
+	)
+}
+
+@using (Html.DevExtreme().NamedTemplate("EmbeddedVehicleTrailerDataGrid"))
+{
+	@(Html.DevExtreme().DataGrid()
+		.ID("embedded-vehicle-trailer-datagrid")
+		.ColumnHidingEnabled(true)
+		.DataSource(new JS(@"component.option(""dataSource"")"))
+		.Columns(columns =>
+		{
+			columns.Add().DataField("RegistrationNo").Caption("Plaka");
+			columns.Add().DataField("VehicleType.Name").Caption("Tür");
+			columns.Add().DataField("Model").Caption("Model");
+			columns.Add().DataField("ModelYear").Caption("Yıl");
+		})
+		.HoverStateEnabled(true)
+		.Paging(p => p.PageSize(10))
+		.Sorting(s => s.Mode(GridSortingMode.None))
+		.FilterRow(f => f.Visible(false))
+		.SearchPanel(searchPanel => searchPanel
+			.Visible(true)
+			.Placeholder("Araç Ara...")
+		)
+		.Scrolling(s => s.Mode(GridScrollingMode.Infinite))
+		.Height(345)
+		.Selection(s => s.Mode(SelectionMode.Single))
+		.SelectedRowKeys(new JS(@"[component.option(""TrailerId"")]"))
+		.OnSelectionChanged(@<text>
+			function(selectedItems) {
+			if(selectedItems === undefined || selectedItems.selectedRowKeys === undefined || selectedItems.selectedRowKeys.length == 0) return;
+			var keys = selectedItems.selectedRowKeys;
+			component.option("value", keys);
+			}
+		</text>)
+	)
+}
+
+
+<script>
+	var selectedStaffs = [],
+		selectedTractors = [],
+		selectedTrailers = [];
+
+	var isStaffFirstOpen = true,
+		isVehicleTractorFirstOpen = true,
+		isVehicleTrailerFirstOpen = true;
+
+	@if (Model.JobStaffs != null)
+	{
+		foreach (var jobStaff in Model.JobStaffs)
+		{
+			var selectedStaff = (jobStaff == null || jobStaff.JobId == 0 ? "" : (jobStaff.Staff?.FirstName + " " + jobStaff.Staff?.LastName + " < " + jobStaff.Staff?.Department?.Name + " " + jobStaff.Staff?.Phone1 + " > "));
+			var selectedTractor = (jobStaff == null || jobStaff.JobId == 0 ? "" : (jobStaff.Tractor?.RegistrationNo + " < " + jobStaff.Tractor?.Make?.Name + " " + jobStaff.Tractor?.Model + " " + jobStaff.Tractor?.ModelYear + " " + jobStaff.Tractor?.Color?.Name + " > "));
+			var selectedTrailer = (jobStaff == null || jobStaff.JobId == 0 ? "" : (jobStaff.Trailer?.RegistrationNo + " < " + string.Join(" ", (new string[] {jobStaff.Trailer?.VehicleType?.Name, jobStaff.Trailer?.Make?.Name, jobStaff.Trailer?.Model, jobStaff.Trailer?.ModelYear.ToString(), jobStaff.Trailer?.Color?.Name}).Where(x => !string.IsNullOrEmpty(x))) + " > "));
+
+			<text>@Html.Raw("selectedStaffs[" + jobStaff.Id + "] = '" + selectedStaff + "';")</text>
+			<text>@Html.Raw("selectedTractors[" + jobStaff.Id+"] = '" + selectedTractor + "';")</text>
+			<text>@Html.Raw("selectedTrailers[" + jobStaff.Id+"] = '" + selectedTrailer + "';")</text>
+		}
+	}
+
+	function OnStaffDataGridValueChange(e) {
+		var emdDataGrid = $("#embedded-staff-datagrid");
+
+		if (emdDataGrid.length) {
+			var emdDataGrid = emdDataGrid.dxDataGrid("instance");
+			emdDataGrid.selectRows(e.value, false);
+			if (!isStaffFirstOpen) e.component.close();
+			isStaffFirstOpen = false;
+		}
+	}
+
+	function OnVehicleTractorDataGridValueChange(e) {
+		var emdDataGrid = $("#embedded-vehicle-tractor-datagrid");
+
+		if (emdDataGrid.length) {
+			var emdDataGrid = emdDataGrid.dxDataGrid("instance");
+			emdDataGrid.selectRows(e.value, false);
+			if (!isVehicleTractorFirstOpen) e.component.close();
+			isVehicleTractorFirstOpen = false;
+		}
+	}
+
+	function OnVehicleTrailerDataGridValueChange(e) {
+		var emdDataGrid = $("#embedded-vehicle-trailer-datagrid");
+
+		if (emdDataGrid.length) {
+			var emdDataGrid = emdDataGrid.dxDataGrid("instance");
+			emdDataGrid.selectRows(e.value, false);
+			if (!isVehicleTrailerFirstOpen) e.component.close();
+			isVehicleTrailerFirstOpen = false;
+		}
+	}
+
+	function StaffDataGridDisplayExpr(item) {
+		var params = [];
+		var name = item && item.FirstName + " " + item.LastName;
+
+		if(item) {
+			if (item.Department && item.Department.Name) params.push(item.Department.Name);
+			if (item.Phone1 && item.Phone1.length > 0) params.push(item.Phone1);
+			if (item.Phone2 && item.Phone2.length > 0) params.push(item.Phone2);
+		}
+
+		if(params.length) {
+			name += " <" + params.join(" ") + ">";
+		}
+
+		return name;
+
+	}
+
+	function VehicleTractorDataGridDisplayExpr(item) {
+		var params = [];
+		var name = item && item.RegistrationNo;
+
+		if(item) {
+			if (item.Make && item.Make.Name) params.push(item.Make.Name);
+			if (item.Model && item.Model.length > 0) params.push(item.Model);
+			if (item.ModelYear > 0) params.push(item.ModelYear.toString());
+			if (item.Color && item.Color.Name) params.push(item.Color.Name);
+		}
+
+		if(params.length) {
+			name += " <" + params.join(" ") + ">";
+		}
+
+		return name;
+	}
+
+	function VehicleTrailerDataGridDisplayExpr(item) {
+		var params = [];
+		var name = item && item.RegistrationNo;
+
+		if(item) {
+			if (item.VehicleType && item.VehicleType.Name) params.push(item.VehicleType.Name);
+			if (item.Make && item.Make.Name) params.push(item.Make.Name);
+			if (item.Model && item.Model.length > 0) params.push(item.Model);
+			if (item.ModelYear > 0) params.push(item.ModelYear.toString());
+			if (item.Color && item.Color.Name) params.push(item.Color.Name);
+		}
+
+		if(params.length) {
+			name += " <" + params.join(" ") + ">";
+		}
+
+		return name;
+	}
+
+
+	function saveJob() {
+		$('#create-job-form').submit();
+	}
+
+	function removeJob() {
+		swal("Silmek istediğinize emin misiniz?", {
+			buttons: {
+				cancel: "İptal",
+				catch: {
+					text: "Sil",
+					value: "remove",
+				}
+				},
+		})
+			.then((value) => {
+				 if (value == "remove") {
+					 swal("Siliniyor...");
+					$('#remove-job-form').submit();
+				 }
+			 });
+		}
+
+	$(document).ready(function () {
+		var inputWidth = $('input[name="StartDate"]').next().width() - 17;
+		//$('input[name="ExchangeRateUsd"]').width(inputWidth)
+
+		@if(Model.Job.HasUpdate && !Model.Job.IsCancelled)
+		{
+			<text>
+				$("#save-btn-tooltip").dxTooltip({
+				target: "#save-btn",
+					position: "left"
+				});
+
+				$("#save-btn-tooltip").dxTooltip("instance").show();
+			</text>
+		}
+
+
+	});
+</script>

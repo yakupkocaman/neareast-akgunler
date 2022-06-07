@@ -1,0 +1,494 @@
+﻿@page
+@model EditModel
+
+@{
+	ViewData["Title"] = "Araç Düzenle";
+	Layout = "~/Pages/Shared/_Layout.cshtml";
+}
+
+@functions
+{
+	public class EditModel : PageBaseModel
+	{
+		[BindProperty]
+		public Vehicle Vehicle { get; set; }
+		public int CurrentVehicleId;
+
+		public List<Document> Documents;
+		public DocumentModel DocumentModel = new DocumentModel();
+
+		private readonly IVehicleService mVehicleService;
+		private readonly IVehicleDocumentService mVehicleDocumentService;
+		private readonly IRepository<Fuel> mFuelRepository;
+		private readonly IRepository<Make> mMakeRepository;
+		private readonly IRepository<Transmission> mTransmissionRepository;
+		private readonly IRepository<VehicleGroup> mVehicleGroupRepository;
+		private readonly IRepository<VehicleType> mVehicleTypeRepository;
+		private readonly IRepository<Currency> mCurrencyRepository;
+		private readonly IRepository<DocumentType> mDocumentTypeRepository;
+		private readonly IRepository<Color> mColorRepository;
+
+		public EditModel(
+			IVehicleService vehicleService,
+			IVehicleDocumentService vehicleDocumentService,
+			IRepository<Fuel> fuelRepository,
+			IRepository<Make> makeRepository,
+			IRepository<Transmission> transmissionRepository,
+			IRepository<VehicleGroup> vehicleGroupRepository,
+			IRepository<VehicleType> vehicleTypeRepository,
+			IRepository<Currency> currencyRepository,
+			IRepository<DocumentType> documentTypeRepository,
+			IRepository<Color> colorRepository
+
+		)
+		{
+			mVehicleService = vehicleService;
+			mVehicleDocumentService = vehicleDocumentService;
+			mFuelRepository = fuelRepository;
+			mMakeRepository = makeRepository;
+			mTransmissionRepository = transmissionRepository;
+			mVehicleGroupRepository = vehicleGroupRepository;
+			mVehicleTypeRepository = vehicleTypeRepository;
+			mCurrencyRepository = currencyRepository;
+			mDocumentTypeRepository = documentTypeRepository;
+			mColorRepository = colorRepository;
+		}
+
+		public IActionResult OnGet(int? id)
+		{
+			if (id.HasValue)
+			{
+				CurrentVehicleId = id.Value;
+				DocumentModel.VehicleId = id.Value;
+
+				Vehicle = mVehicleService.GetFull(CurrentVehicleId);
+
+
+				if (Vehicle == null)
+				{
+					return NotFound();
+				}
+				else
+				{
+					Documents = mVehicleDocumentService.GetAllDocuments(CurrentVehicleId);
+				}
+			}
+
+			LoadPageData();
+			return Page();
+		}
+
+		public IActionResult OnPost(int? id)
+		{
+			if (!ModelState.IsValid)
+			{
+				SetFlashMessage(ModelState);
+
+				LoadPageData();
+				return Page();
+			}
+
+			var existsVehicles = mVehicleService.GetVehiclesByRegistrationNo(Vehicle.RegistrationNo);
+			var isVehicleExists = id.HasValue ? existsVehicles.Where(x => x.Id != id.Value).Any() : existsVehicles.Any();
+
+			if(isVehicleExists)
+			{
+				SetFlashMessage("'" + Vehicle.RegistrationNo + "' plakalı araç zaten mevcut", "error");
+
+				LoadPageData();
+				return Page();
+			}
+
+			if (id.HasValue)
+			{
+				CurrentVehicleId = id.Value;
+				Vehicle.Id = id.Value;
+
+				mVehicleService.Update(Vehicle);
+
+				SetFlashMessage("Araç başarıyla düzenlendi", "success");
+
+				return RedirectToPage("./Index");
+			}
+			else
+			{
+				mVehicleService.Insert(Vehicle);
+
+				if (Vehicle.Id > 0)
+				{
+					SetFlashMessage("Araç başarıyla kaydedildi", "success");
+
+					return RedirectToPage("./Edit", new { id = Vehicle.Id });
+				}
+			}
+
+			return Page();
+		}
+
+		public IActionResult OnPostDelete(int? id)
+		{
+			if (id == null)
+			{
+				return NotFound();
+			}
+
+			Vehicle = Vehicle.Get<Vehicle>(id.Value);
+			Vehicle.DeletedOn = DateTime.Now;
+			mVehicleService.Update(Vehicle);
+
+			SetFlashMessage("Araç başarıyla silindi", "success");
+
+			if (Vehicle != null)
+			{
+				return RedirectToPage("./Index");
+			}
+
+			return Page();
+		}
+
+		public DocumentModel GetDocumentModel(int vehicleId, Document document)
+		{
+			var documentModel = new DocumentModel();
+			documentModel.DocumentId = document.Id;
+			documentModel.FileName = document.FileName;
+			documentModel.DocumentTypeId = document.DocumentTypeId.Value;
+			documentModel.Name = document.Name;
+			documentModel.Total = document.Total;
+			documentModel.CurrencyId = document.CurrencyId.Value;
+			documentModel.DocumentTypes = DocumentModel.DocumentTypes;
+			documentModel.Currencies = DocumentModel.Currencies;
+
+			documentModel.VehicleId = vehicleId;
+
+			return documentModel;
+		}
+
+		private void LoadPageData()
+		{
+			DocumentModel.Currencies = mCurrencyRepository.Query().ToList();
+			DocumentModel.DocumentTypes = mDocumentTypeRepository.Query().Where(x => x.DocumentGroup == DocumentGroup.Vehicle).ToList();
+
+			DocumentModel.CurrencyId = DocumentModel.Currencies.First().Id;
+			DocumentModel.DocumentTypeId = DocumentModel.DocumentTypes.First().Id;
+			DocumentModel.Date = DateTime.Now;
+
+			var years = new List<SelectListItem>();
+			for (int i = DateTime.Now.Year; i >= 2010; i--)
+			{
+				years.Add(new SelectListItem { Text = i.ToString(), Value = i.ToString() });
+			}
+			ViewData["ModelYear"] = new SelectList(years, "Value", "Text");
+
+
+			ViewData["ColorId"] = new SelectList(mColorRepository.Query().ToList().OrderBy(x => x.Name), "Id", "Name");
+			ViewData["FuelId"] = new SelectList(mFuelRepository.Query().OrderBy(x => x.Name), "Id", "Name");
+			ViewData["MakeId"] = new SelectList(mMakeRepository.Query().OrderBy(x => x.Name), "Id", "Name");
+			ViewData["TransmissionId"] = new SelectList(mTransmissionRepository.Query().OrderBy(x => x.Name), "Id", "Name");
+			ViewData["VehicleGroupId"] = new SelectList(mVehicleGroupRepository.Query().OrderBy(x => x.Name), "Id", "Name");
+			ViewData["VehicleTypeId"] = new SelectList(mVehicleTypeRepository.Query().OrderBy(x => x.Name), "Id", "Name");
+		}
+	}
+}
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center mb-3">
+					<h4 class="card-title mb-0">@(Model.CurrentVehicleId > 0 ? ("Düzenle - " + Model.Vehicle.RegistrationNo) : "Yeni Araç")</h4>
+					<div>
+						<button class="btn btn-primary btn-sm" onclick="saveVehicle()">Kaydet</button>
+						@if (Model.CurrentVehicleId > 0)
+						{
+							<button class="btn btn-danger btn-sm" onclick="removeVehicle()">Sil</button>
+						}
+						<a class="btn btn-light btn-sm d-none d-md-inline-block" asp-page="./index">Listeye Dön</a>
+					</div>
+				</div>
+				<div>
+					<form method="post" id="remove-vehicle-form" asp-page-handler="Delete" asp-route-id="@Model.CurrentVehicleId"></form>
+					<form method="post" id="create-vehicle-form">
+						@(Html.DevExtreme().Form<Vehicle>()
+							.Items(items =>
+							{
+								items.AddGroup()
+									.CssClass("first-group")
+									.ColCount(3)
+									.Items(groupItems =>
+									{
+										groupItems.AddGroup().ColCount(2).ColSpan(2).Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.VehicleGroupId)
+												.CssClass("clean-padding-on-show")
+												.Editor(e => e
+													.SelectBox()
+													.ID("VehicleGroupId")
+													.OnValueChanged("onVehicleGroupChange")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.ShowClearButton(true)
+													.DataSource(ViewBag.VehicleGroupId)
+													.Value(@Model.Vehicle?.VehicleGroupId.ToString())
+												)
+												.IsRequired(false)
+												.Label(m => m.Text("Araç Grubu"));
+
+											secondGroupItems.AddSimpleFor(m => m.VehicleTypeId)
+												.CssClass("can-show")
+												.Editor(e => e
+													.SelectBox()
+													.ID("VehicleTypeId")
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.ShowClearButton(true)
+													.DataSource(ViewBag.VehicleTypeId)
+													.Value(@Model.Vehicle?.VehicleTypeId.ToString()))
+													.IsRequired(false)
+													.Label(m => m.Text("Araç Tipi"));
+
+											secondGroupItems.AddSimpleFor(m => m.MakeId)
+												.Editor(e => e
+													.SelectBox()
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.ShowClearButton(true)
+													.DataSource(ViewBag.MakeId)
+													.Value(@Model.Vehicle?.MakeId.ToString()))
+													.IsRequired(false)
+													.Label(m => m.Text("Marka"));
+
+											secondGroupItems.AddSimpleFor(m => m.Model).Label(m => m.Text("Model"));
+
+											secondGroupItems.AddSimpleFor(m => m.ModelYear)
+												.Editor(e => e
+													.SelectBox()
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.ShowClearButton(true)
+													.DataSource(ViewBag.ModelYear)
+													.Value(@Model.Vehicle?.ModelYear.ToString()))
+													.IsRequired(false)
+													.Label(m => m.Text("Yıl"));
+
+											secondGroupItems.AddSimpleFor(m => m.ColorId)
+												.Editor(e => e
+													.SelectBox()
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.ShowClearButton(true)
+													.DataSource(ViewBag.ColorId)
+													.Value(@Model.Vehicle?.ColorId.ToString()))
+													.IsRequired(false)
+													.Label(m => m.Text("Renk"));
+
+											secondGroupItems.AddSimpleFor(m => m.FuelId)
+												.CssClass("can-hide")
+												.Editor(e => e
+													.SelectBox()
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.ShowClearButton(true)
+													.DataSource(ViewBag.FuelId)
+													.Value(@Model.Vehicle?.FuelId.ToString()))
+													.IsRequired(false)
+													.Label(m => m.Text("Yakıt"));
+
+											secondGroupItems.AddSimpleFor(m => m.TransmissionId)
+												.CssClass("can-hide")
+												.Editor(e => e
+													.SelectBox()
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.ShowClearButton(true)
+													.DataSource(ViewBag.TransmissionId)
+													.Value(@Model.Vehicle?.TransmissionId.ToString()))
+													.IsRequired(false)
+													.Label(m => m.Text("Vites"));
+
+											secondGroupItems.AddSimpleFor(m => m.ChassisNumber).CssClass("clean-padding").Label(m => m.Text("Şasi No"));
+											secondGroupItems.AddSimpleFor(m => m.EngineNumber).CssClass("can-hide").Label(m => m.Text("Motor No"));
+
+										});
+										
+										groupItems.AddGroup().Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.RegistrationNo).CssClass("uppercase-field").Label(m => m.Text("Plaka No")).IsRequired(true);
+											secondGroupItems.AddSimpleFor(m => m.Mileage).CssClass("can-hide").Label(m => m.Text("Km Sayaç")).IsRequired(false);
+											secondGroupItems.AddSimpleFor(m => m.MileageDate)
+												.CssClass("can-hide")
+												.Editor(e => e
+												.DateBox()
+												.DisplayFormat("dd/MM/yyyy")
+												.Type(DateBoxType.Date)
+												.Width("100%"))
+												.Label(m => m.Text("Km Tarih")).IsRequired(false);
+											secondGroupItems.AddSimpleFor(m => m.IsActive)
+												.CssClass("clean-padding")
+												.Editor(e => e
+													.Switch()
+													.Width(80)
+													.SwitchedOnText("Aktif")
+													.SwitchedOffText("Pasif"))
+													.Label(m => m.Text("Durum"));
+										});
+
+
+									});
+
+							})
+							.FormData(Model.Vehicle)
+						)
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="table-responsive">
+				<table class="table center-aligned-table">
+					<thead>
+						<tr class="bg-light">
+							<th class="border-bottom-0">Açıklama</th>
+							<th class="border-bottom-0">Evrak Tipi</th>
+							<th class="border-bottom-0">Evrak Tarihi</th>
+							<th class="border-bottom-0">Tutar</th>
+							<th class="border-bottom-0 table-icon-btn-col" width="60">
+								<i onclick="showDocumentForm(0)" class="table-icon-btn mdi mdi-plus-box"></i>
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						@if (Model.Documents != null)
+						{
+							foreach (var doc in Model.Documents)
+							{
+								<tr>
+									<td>@doc.Name</td>
+									<td>@doc.DocumentType.Name</td>
+									<td>@doc.Date.ToString("dd/MM/yyyy")</td>
+									<td>@doc.Total @doc.Currency.Sign</td>
+									<td class="table-icon-btn-col">
+										<i onclick="showDocumentForm(@doc.Id)" class="table-icon-btn mdi mdi-pencil-box-outline"></i>
+
+										@using (Html.DevExtreme().NamedTemplate("document-template-" + doc.Id))
+										{
+											<div class="vehicle-popup-content">
+												<partial name="Partials/Core/DocumentForm" model="Model.GetDocumentModel(Model.Vehicle.Id, doc)" />
+											</div>
+										}
+									</td>
+								</tr>
+							}
+
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div id="popup">
+	@(Html.DevExtreme().Popup()
+		.ID("vehicle-popup")
+		.ElementAttr("class", "popup")
+		.Width("auto")
+		.MaxWidth(400)
+		.Height("auto")
+		.ShowTitle(true)
+		.Title("-----------------------------------")
+		.Visible(false)
+		.DragEnabled(false)
+		.CloseOnOutsideClick(false)
+	)
+
+
+	@using (Html.DevExtreme().NamedTemplate("document-template-0"))
+	{
+		<div class="vehicle-popup-content">
+			<partial name="Partials/Core/DocumentForm" model="Model.DocumentModel" />
+		</div>
+	}
+
+	<script type="text/javascript">
+		function showDocumentForm(id) {
+			showPopup('document', 'Evrak ' + (id == 0 ? 'Ekle':'Düzenle'), id)
+		}
+
+		function showPopup(type, title, id) {
+			var vehicleId = @(Model.Vehicle != null && Model.Vehicle.Id > 0 ? Model.Vehicle.Id : 0);
+			if (vehicleId == 0) {
+				swal("Uyarı", title.substr(0, 1) + title.substr(1).toLocaleLowerCase() + "mek için aracı kaydetmeniz gerekmekedir.", "warning");
+				return;
+			}
+			var popup = $("#vehicle-popup").dxPopup("instance");
+			popup.option("contentTemplate", $("#" + type + "-template-" + id));
+			popup.show();
+
+			$('.dx-toolbar-label .dx-item-content').text(title);
+			$(".vehicle-popup-content").find('*[data-action="close"]').click(function () { popup.hide(); });
+		}
+	</script>
+</div>
+
+<script>
+	function saveVehicle() {
+		$('#create-vehicle-form').submit();
+	}
+
+	function removeVehicle() {
+		swal("Silmek istediğinize emin misiniz?", {
+			buttons: {
+				cancel: "İptal",
+				catch: {
+					text: "Sil",
+					value: "remove",
+				}
+			},
+		})
+			.then((value) => {
+				if (value == "remove") {
+					swal("Siliniyor...");
+					$('#remove-vehicle-form').submit();
+				}
+			});
+	}
+
+	function onVehicleGroupChange(e) {
+		console.log(e);	
+		updateFormFields();
+	}
+
+	function updateFormFields() {
+		var selectedVehicleGroupId = $("#VehicleGroupId").dxSelectBox('instance').option('value');
+		var isFormItemsDisabled = selectedVehicleGroupId == '1';
+		if(isFormItemsDisabled) {
+			$('.can-hide').parent().parent().addClass('d-none');
+			$('.can-show').parent().parent().removeClass('d-none');
+			$('.clean-padding-on-show').removeClass('p-0');
+			$('.clean-padding').addClass('pr-0');
+		}
+		else {
+			$('.can-hide').parent().parent().removeClass('d-none');
+			$('.can-show').parent().parent().addClass('d-none');
+			$('.clean-padding-on-show').addClass('p-0');
+			$('.clean-padding').removeClass('pr-0');
+		}
+
+		return;
+
+		console.log(selectedVehicleGroupId)
+
+		//$("[name='RegistrationNo']").dxTextBox('instance').option('disabled', isFormItemsDisabled);
+		
+		$("#VehicleTypeId").dxSelectBox('instance').option("visible", isFormItemsDisabled)
+		if(isFormItemsDisabled) { 
+			$("#VehicleTypeId").dxSelectBox('instance').reset();
+		}
+	}
+
+	$(document).ready(updateFormFields)
+</script>

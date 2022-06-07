@@ -1,0 +1,132 @@
+﻿@page
+@model IndexModel
+@{
+	ViewData["Title"] = "Araçlar";
+}
+
+@functions {
+	public class IndexModel : PageBaseModel
+	{
+		public List<Vehicle> Vehicles;
+
+		private IRepository<Vehicle> mVehicleRepository;
+
+		public IndexModel(
+			IRepository<Vehicle> vehicleRepository
+		)
+		{
+			mVehicleRepository = vehicleRepository;
+		}
+
+		public IActionResult OnGet()
+		{
+			Vehicles = mVehicleRepository.Query()
+				.Include(x => x.VehicleType)
+				.Include(x => x.VehicleGroup)
+				.Include(x => x.Color)
+				.Include(x => x.Make)
+				.Include(x => x.Transmission)
+				.Include(x => x.Fuel)
+				.Where(x => x.DeletedOn == null)
+				.ToList();
+
+			return Page();
+		}
+
+		[HttpGet]
+        public IActionResult OnGetVehicles(DataSourceLoadOptions loadOptions) {
+			var query = mVehicleRepository.Query()
+				.Include(x => x.VehicleType)
+				.Include(x => x.VehicleGroup)
+				.Include(x => x.Color)
+				.Include(x => x.Make)
+				.Include(x => x.Transmission)
+				.Include(x => x.Fuel)
+				.Where(x => x.DeletedOn == null);
+
+            return new OkObjectResult(DataSourceLoader.Load(query, loadOptions));
+        }
+	}
+}
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center">
+					<h4 class="card-title mb-0">Araçlar</h4>
+					<a class="btn btn-light btn-sm" asp-page="./edit">Yeni Ekle</a>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+@(Html.DevExtreme().DataGrid<Vehicle>()
+    .DataSource(d => d.Mvc().Controller("Index").LoadParams(new { Handler = "Vehicles" }).Key("Id"))
+    .RemoteOperations(true)
+    .Columns(columns => {
+
+        columns.AddFor(m => m.Id)
+			.SortOrder(SortOrder.Desc)
+			.Alignment(HorizontalAlignment.Left)
+			.Width(60)
+			.Caption("Id");
+
+        columns.AddFor(m => m.VehicleGroup.Name)
+			.Caption("Grup");
+
+        columns.AddFor(m => m.VehicleType.Name)
+			.Caption("Tür");
+
+        columns.AddFor(m => m.RegistrationNo)
+			.Caption("Plaka");
+
+        columns.AddFor(m => m.Make.Name)
+			.Caption("Marka");
+
+        columns.AddFor(m => m.Model)
+			.Caption("Model");
+
+        columns.AddFor(m => m.ModelYear)
+			.Caption("Yıl")
+			.Alignment(HorizontalAlignment.Left);
+
+        columns.AddFor(m => m.Fuel.Name)
+			.Caption("Yakıt");
+
+        columns.AddFor(m => m.Transmission.Name)
+			.Caption("Vites");
+
+        columns.AddFor(m => m.IsActive)
+			.FalseText("Pasif")
+			.TrueText("Aktif")
+			.Caption("Durum");
+    })
+    .FilterRow(f => f.Visible(true))
+    .HeaderFilter(f => f.Visible(false))
+    .GroupPanel(p => p.Visible(false))
+    .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+	.Paging(paging => paging.PageSize(10))
+    .Pager(pager => {
+        pager.Visible(true);
+        pager.ShowPageSizeSelector(true);
+        pager.AllowedPageSizes(new JS("[10, 20, 50]"));
+        pager.ShowNavigationButtons(true);
+    })
+	.Selection(s => s.Mode(SelectionMode.Single))
+    .HoverStateEnabled(true)
+    .ShowBorders(true)
+	.ShowRowLines(true)
+    .Grouping(g => g.AutoExpandAll(false))
+	.OnSelectionChanged("onSelectionChanged")
+	.NoDataText("Veri bulunamadı")
+)
+
+<script>
+    function onSelectionChanged(selectedItems) {
+        var data = selectedItems.selectedRowsData[0];
+        if(data) {
+			window.location.href = baseUrl + "vehicles/edit?id=" + data.Id;
+        }
+    }
+</script>

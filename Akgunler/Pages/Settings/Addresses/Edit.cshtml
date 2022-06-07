@@ -1,0 +1,231 @@
+﻿@page
+@model EditModel
+
+@{
+	ViewData["Title"] = "Adres Düzenle";
+	Layout = "~/Pages/Shared/_Layout.cshtml";
+}
+
+@functions
+{
+	public class EditModel : PageBaseModel
+	{
+		[BindProperty]
+		public Address Address { get; set; }
+		public int CurrentAddressId;
+
+		public readonly IAddressService mAddressService;
+		public readonly IRepositoryWithTypedId<Country, string> mCountryRepository;
+		public readonly IRepository<Province> mProvinceRepository;
+		public readonly IRepository<District> mDistrictRepository;
+		public readonly IRepository<AddressType> mAddressTypeRepository;
+
+		public EditModel(
+			IAddressService addressService,
+			IRepositoryWithTypedId<Country, string> countryRepository,
+			IRepository<Province> provinceRepository,
+			IRepository<District> districtRepository,
+			IRepository<Address> addressRepository,
+			IRepository<AddressType> addressTypeRepository
+		)
+		{
+			mAddressService = addressService;
+			mCountryRepository = countryRepository;
+			mProvinceRepository = provinceRepository;
+			mDistrictRepository = districtRepository;
+			mAddressTypeRepository = addressTypeRepository;
+		}
+
+		public IActionResult OnGet(int? id)
+		{
+			if (id.HasValue)
+			{
+				CurrentAddressId = id.Value;
+
+				Address = mAddressService.GetWithType(CurrentAddressId);
+
+				if (Address == null)
+				{
+					return NotFound();
+				}
+
+				if (Address.AddressType != null && Address.AddressType.AddressGroup != AddressGroup.Job)
+				{
+					return RedirectToPage("./Index");
+				}
+			}
+
+			LoadPageData();
+			return Page();
+		}
+
+		public IActionResult OnPost(int? id)
+		{
+			if (!ModelState.IsValid)
+			{
+				LoadPageData();
+				return Page();
+			}
+			if (id.HasValue)
+			{
+				CurrentAddressId = id.Value;
+				Address.Id = id.Value;
+
+				mAddressService.Update(Address);
+
+				return RedirectToPage("./Index");
+			}
+			else
+			{
+				mAddressService.Insert(Address);
+
+				if (Address.Id > 0)
+				{
+					return RedirectToPage("./Edit", new { id = Address.Id });
+				}
+			}
+
+			return Page();
+		}
+
+		public IActionResult OnPostDelete(int? id)
+		{
+			if (id == null)
+			{
+				return NotFound();
+			}
+
+			Address = Address.Get<Address>(id.Value);
+			Address.DeletedOn = DateTime.Now;
+
+			mAddressService.Update(Address);
+
+			if (Address != null)
+			{
+				return RedirectToPage("./Index");
+			}
+
+			return Page();
+		}
+
+		private void LoadPageData()
+		{
+			ViewData["AddressTypeId"] = new SelectList(mAddressTypeRepository.Query().Where(x => x.AddressGroup == AddressGroup.Job), "Id", "Name");
+			ViewData["City"] = new SelectList(mProvinceRepository.Query(), "ProvinceId", "Name");
+		}
+	}
+}
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center mb-3">
+					<h4 class="card-title mb-0">@(Model.CurrentAddressId > 0 ? "Adres Düzenle" : "Yeni Adres")</h4>
+					<div>
+						<button class="btn btn-primary btn-sm" onclick="saveAddress()">Kaydet</button>
+						@if (Model.CurrentAddressId > 0)
+						{
+							<button class="btn btn-danger btn-sm" onclick="removeAddress()">Sil</button>
+						}
+						<a class="btn btn-light btn-sm d-none d-md-inline-block" asp-page="./index">Listeye Dön</a>
+					</div>
+				</div>
+				<div>
+					<form method="post" id="remove-Address-form" asp-page-handler="Delete" asp-route-id="@Model.CurrentAddressId"></form>
+					<form method="post" id="create-address-form">
+						@(Html.DevExtreme().Form<Address>()
+							.ID("create-form")
+							.Items(items =>
+							{
+								items.AddGroup()
+									.CssClass("first-group")
+									.ColCount(2)
+									.Items(groupItems =>
+									{
+										groupItems.AddGroup().ColSpan(2).Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.AddressLine)
+												.Editor(e => e
+													.TextArea()
+												)
+												.Label(m => m.Text("Adres")).IsRequired(true);
+										});
+
+
+										groupItems.AddGroup().Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.DistrictId)
+														.Editor(e => e
+															.SelectBox()
+															.DisplayExpr("Text")
+															.ValueExpr("Value")
+															.DataSource(ViewBag.District)
+															.Value(@Model.Address?.DistrictId))
+															.IsRequired(false)
+															.Label(m => m.Text("Şehir"));
+										});
+
+										groupItems.AddGroup().Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.AddressTypeId)
+														.Editor(e => e
+															.SelectBox()
+															.DisplayExpr("Text")
+															.ValueExpr("Value")
+															.DataSource(ViewBag.AddressTypeId)
+															.Value(@Model.Address?.AddressTypeId.ToString()))
+															.IsRequired(false)
+															.Label(m => m.Text("Adres Grubu"));
+
+										});
+
+										groupItems.AddGroup().Items(secondGroupItems =>
+										{
+
+											secondGroupItems.AddSimpleFor(m => m.IsActive)
+														.Editor(e => e
+															.Switch()
+															.Width(80)
+															.SwitchedOnText("Aktif")
+															.SwitchedOffText("Pasif"))
+															.Label(m => m.Text("Durum"));
+
+										});
+
+
+									});
+
+							})
+							.FormData(Model.Address)
+						)
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<script>
+	function saveAddress() {
+		$('#create-address-form').submit();
+	}
+
+	function removeAddress() {
+		swal("Silmek istediğinize emin misiniz?", {
+			buttons: {
+				cancel: "İptal",
+				catch: {
+					text: "Sil",
+					value: "remove",
+				}
+				},
+		})
+			.then((value) => {
+				 if (value == "remove") {
+					 swal("Siliniyor...");
+					$('#remove-Address-form').submit();
+				 }
+			 });
+		}
+</script>

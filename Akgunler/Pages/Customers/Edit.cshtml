@@ -1,0 +1,505 @@
+﻿@page
+@model EditModel
+
+@{
+	ViewData["Title"] = "Müşteri Düzenle";
+	Layout = "~/Pages/Shared/_Layout.cshtml";
+}
+
+@functions
+{
+	public class EditModel : PageBaseModel
+	{
+		[BindProperty]
+		public Customer Customer { get; set; }
+		public int CurrentCustomerId;
+
+		public List<Address> Addresses;
+		public List<Contact> Contacts;
+		public List<Document> Documents;
+
+		public AddressModel AddressModel = new AddressModel();
+		public ContactModel ContactModel = new ContactModel();
+		public DocumentModel DocumentModel = new DocumentModel();
+
+		private readonly ICustomerService mCustomerService;
+		private readonly ICustomerAddressService mCustomerAddressService;
+		private readonly ICustomerContactService mCustomerContactService;
+		private readonly ICustomerDocumentService mCustomerDocumentService;
+		private readonly IRepository<Currency> mCurrencyRepository;
+		private readonly IRepository<DocumentType> mDocumentTypeRepository;
+		private readonly IRepository<AddressType> mAddressTypeRepository;
+		private readonly IRepository<Group> mGroupRepository;
+
+		public EditModel(
+			ICustomerService customerService,
+			ICustomerAddressService customerAddressService,
+			ICustomerContactService customerContactService,
+			ICustomerDocumentService customerDocumentService,
+			IRepository<Currency> currencyRepository,
+			IRepository<DocumentType> documentTypeRepository,
+			IRepository<AddressType> addressTypeRepository,
+			IRepository<Group> groupRepository
+		)
+		{
+			mCustomerService = customerService;
+			mCustomerAddressService = customerAddressService;
+			mCustomerContactService = customerContactService;
+			mCustomerDocumentService = customerDocumentService;
+			mCurrencyRepository = currencyRepository;
+			mDocumentTypeRepository = documentTypeRepository;
+			mAddressTypeRepository = addressTypeRepository;
+			mGroupRepository = groupRepository;
+		}
+
+		public IActionResult OnGet(int? id)
+		{
+			if (id.HasValue)
+			{
+				CurrentCustomerId = id.Value;
+				AddressModel.CustomerId = CurrentCustomerId;
+				ContactModel.CustomerId = CurrentCustomerId;
+				DocumentModel.CustomerId = CurrentCustomerId;
+
+				Customer = mCustomerService.GetWithGroup(CurrentCustomerId);
+
+				if (Customer == null)
+				{
+					return NotFound();
+				}
+				else
+				{
+					Addresses = mCustomerAddressService.GetAllAddresses(CurrentCustomerId);
+					Contacts = mCustomerContactService.GetAllContacts(CurrentCustomerId);
+					Documents = mCustomerDocumentService.GetAllDocuments(CurrentCustomerId);
+				}
+			}
+
+			LoadPageData();
+			return Page();
+		}
+
+		public IActionResult OnPost(int? id)
+		{
+			if (!ModelState.IsValid)
+			{
+				SetFlashMessage(ModelState);
+				LoadPageData();
+				return Page();
+			}
+			if (id.HasValue)
+			{
+				CurrentCustomerId = id.Value;
+				Customer.Id = id.Value;
+
+				mCustomerService.Update(Customer);
+
+				SetFlashMessage("Müşteri bilgileri başarıyla düzenlendi", "success");
+
+				return RedirectToPage("./Index");
+			}
+			else
+			{
+				mCustomerService.Insert(Customer);
+
+				SetFlashMessage("Müşteri bilgileri başarıyla kaydedildi", "success");
+
+				if (Customer.Id > 0)
+				{
+					return RedirectToPage("./Edit", new { id = Customer.Id });
+				}
+			}
+
+			return Page();
+		}
+
+		public IActionResult OnPostDelete(int? id)
+		{
+			if (id == null)
+			{
+				return NotFound();
+			}
+
+			Customer = Customer.Get<Customer>(id.Value);
+			Customer.DeletedOn = DateTime.Now;
+
+			mCustomerService.Update(Customer);
+
+			SetFlashMessage("Müşteri başarıyla silindi", "success");
+
+			if (Customer != null)
+			{
+				return RedirectToPage("./Index");
+			}
+
+			return Page();
+		}
+
+		public AddressModel GetAddressModel(int customerId, Address address)
+		{
+			var addressModel = new AddressModel();
+			addressModel.AddressId = address.Id;
+			addressModel.Name = address.Name;
+			addressModel.AddressTypeId = address.AddressTypeId;
+			addressModel.AddressLine = address.AddressLine;
+			addressModel.DistrictId = address.DistrictId;
+			addressModel.ProvinceId = address.District?.ProvinceId;
+			addressModel.CountryId = address.District?.Province?.CountryId;
+			addressModel.PostalCode = address.PostalCode;
+			addressModel.Note = address.Note;
+			addressModel.IsActive = address.IsActive;
+			addressModel.AddressTypes = AddressModel.AddressTypes;
+
+			addressModel.CustomerId = customerId;
+
+			return addressModel;
+		}
+
+		public ContactModel GetContactModel(int customerId, Contact contact)
+		{
+			var contactModel = new ContactModel();
+			contactModel.ContactId = contact.Id;
+			contactModel.FirstName = contact.FirstName;
+			contactModel.LastName = contact.LastName;
+			contactModel.Title = contact.Title;
+			contactModel.Phone1 = contact.Phone1;
+			contactModel.Phone2 = contact.Phone2;
+			contactModel.Email = contact.Email;
+			contactModel.Note = contact.Note;
+
+			contactModel.CustomerId = customerId;
+
+			return contactModel;
+		}
+
+		public DocumentModel GetDocumentModel(int customerId, Document document)
+		{
+			var documentModel = new DocumentModel();
+			documentModel.DocumentId = document.Id;
+			documentModel.FileName = document.FileName;
+			documentModel.DocumentTypeId = document.DocumentTypeId.Value;
+			documentModel.Name = document.Name;
+			documentModel.Total = document.Total;
+			documentModel.CurrencyId = document.CurrencyId.Value;
+			documentModel.DocumentTypes = DocumentModel.DocumentTypes;
+			documentModel.Currencies = DocumentModel.Currencies;
+
+			documentModel.CustomerId = customerId;
+
+			return documentModel;
+		}
+
+		private void LoadPageData()
+		{
+			DocumentModel.Currencies = mCurrencyRepository.Query().ToList();
+			DocumentModel.DocumentTypes = mDocumentTypeRepository.Query().Where(x => x.DocumentGroup == DocumentGroup.Customer).ToList();
+
+			DocumentModel.CurrencyId = DocumentModel.Currencies.First().Id;
+			DocumentModel.DocumentTypeId = DocumentModel.DocumentTypes.First().Id;
+			DocumentModel.Date = DateTime.Now;
+			
+			AddressModel.AddressTypes = mAddressTypeRepository.Query().Where(x => x.AddressGroup == AddressGroup.Customer).ToList();
+			ViewData["GroupId"] = new SelectList(mGroupRepository.Query(), "Id", "Name");
+		}
+	}
+}
+
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center mb-3">
+					<h4 class="card-title mb-0">@(Model.CurrentCustomerId > 0 ? ("Düzenle - " + Model.Customer.Name) : "Yeni Müşteri")</h4>
+					<div>
+						<button class="btn btn-primary btn-sm" onclick="saveCustomer()">Kaydet</button>
+						@if (Model.CurrentCustomerId > 0)
+						{
+							<button class="btn btn-danger btn-sm" onclick="removeCustomer()">Sil</button>
+						}
+						<a class="btn btn-light btn-sm d-none d-md-inline-block" asp-page="./index">Listeye Dön</a>
+					</div>
+				</div>
+				<div>
+					<form method="post" id="remove-customer-form" asp-page-handler="Delete" asp-route-id="@Model.CurrentCustomerId"></form>
+					<form method="post" id="create-customer-form">
+						@(Html.DevExtreme().Form<Customer>()
+							.ID("create-form")
+							.Items(items =>
+							{
+								items.AddGroup()
+									.CssClass("first-group")
+									.ColCount(2)
+									.Items(groupItems =>
+									{
+										groupItems.AddGroup().Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.Name).Label(m => m.Text("Ad")).IsRequired(true);
+											secondGroupItems.AddSimpleFor(m => m.Title).Label(m => m.Text("Unvan")).IsRequired(false);
+										});
+
+										groupItems.AddGroup().Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.GroupId)
+														.Editor(e => e
+															.SelectBox()
+															.DisplayExpr("Text")
+															.ValueExpr("Value")
+															.DataSource(ViewBag.GroupId)
+															.Value(@Model.Customer?.GroupId.ToString()))
+															.IsRequired(false)
+															.Label(m => m.Text("Müşteri Grubu"));
+
+											secondGroupItems.AddSimpleFor(m => m.IsActive)
+														.Editor(e => e
+															.Switch()
+															.Width(80)
+															.SwitchedOnText("Aktif")
+															.SwitchedOffText("Pasif"))
+															.Label(m => m.Text("Durum"));
+
+										});
+
+
+									});
+
+							})
+							.FormData(Model.Customer)
+						)
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="table-responsive">
+				<table class="table center-aligned-table">
+					<thead>
+						<tr class="bg-light">
+							<th class="border-bottom-0">Başlık</th>
+							<th class="border-bottom-0">Adres Tipi</th>
+							<th class="border-bottom-0">Adres</th>
+							<th class="border-bottom-0">Not</th>
+							<th class="border-bottom-0 table-icon-btn-col" width="60">
+								<i onclick="showAddressForm(0)" class="table-icon-btn mdi mdi-plus-box"></i>
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						@if (Model.Addresses != null && Model.Addresses.Count > 0)
+						{
+							foreach (var address in Model.Addresses)
+							{
+								<tr>
+									<td>@address.Name</td>
+									<td>@address.AddressType.Name</td>
+									<td>@address.AddressLine @address.District?.Province?.Name @address.District?.Province?.Country.Name</td>
+									<td>@address.Note</td>
+									<td class="table-icon-btn-col">
+										<i onclick="showAddressForm(@address.Id)" class="table-icon-btn mdi mdi-pencil-box-outline"></i>
+
+
+										@using (Html.DevExtreme().NamedTemplate("address-template-" + address.Id))
+										{
+										<div class="customer-popup-content">
+											<partial name="Partials/Customers/AddressForm" model="Model.GetAddressModel(Model.Customer.Id, address)" />
+										</div>
+										}
+									</td>
+								</tr>
+							}
+
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="table-responsive">
+				<table class="table center-aligned-table">
+					<thead>
+						<tr class="bg-light">
+							<th class="border-bottom-0">Yetkili Kişi</th>
+							<th class="border-bottom-0">Telefon</th>
+							<th class="border-bottom-0">Eposta</th>
+							<th class="border-bottom-0">Not</th>
+							<th class="border-bottom-0 table-icon-btn-col" width="60">
+								<i onclick="showContactForm(0)" class="table-icon-btn mdi mdi-plus-box"></i>
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						@if (Model.Contacts != null && Model.Contacts.Count > 0)
+						{
+							foreach (var contact in Model.Contacts)
+							{
+								<tr>
+									<td>@contact.FirstName @contact.LastName</td>
+									<td>@contact.Phone1</td>
+									<td>@contact.Email</td>
+									<td>@contact.Note</td>
+									<td class="table-icon-btn-col">
+										<i onclick="showContactForm(@contact.Id)" class="table-icon-btn mdi mdi-pencil-box-outline"></i>
+
+										@using (Html.DevExtreme().NamedTemplate("contact-template-" + contact.Id))
+										{
+											<div class="customer-popup-content">
+												<partial name="Partials/Customers/ContactForm" model="Model.GetContactModel(Model.Customer.Id, contact)" />
+											</div>
+										}
+									</td>
+								</tr>
+							}
+
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="table-responsive">
+				<table class="table center-aligned-table">
+					<thead>
+						<tr class="bg-light">
+							<th class="border-bottom-0">Açıklama</th>
+							<th class="border-bottom-0">Evrak Tipi</th>
+							<th class="border-bottom-0">Evrak Tarihi</th>
+							<th class="border-bottom-0">Tutar</th>
+							<th class="border-bottom-0 table-icon-btn-col" width="60">
+								<i onclick="showDocumentForm(0)" class="table-icon-btn mdi mdi-plus-box"></i>
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						@if (Model.Documents != null && Model.Documents.Count > 0)
+						{
+							foreach (var doc in Model.Documents)
+							{
+								<tr>
+									<td>@doc.Name</td>
+									<td>@doc.DocumentType.Name</td>
+									<td>@doc.Date.ToString("dd/MM/yyyy")</td>
+									<td>@doc.Total @doc.Currency.Sign</td>
+									<td class="table-icon-btn-col">
+										<i onclick="showDocumentForm(@doc.Id)" class="table-icon-btn mdi mdi-pencil-box-outline"></i>
+
+										@using (Html.DevExtreme().NamedTemplate("document-template-" + doc.Id))
+										{
+										<div class="customer-popup-content">
+											<partial name="Partials/Core/DocumentForm" model="Model.GetDocumentModel(Model.Customer.Id, doc)" />
+										</div>
+										}
+									</td>
+								</tr>
+							}
+
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div id="popup">
+	@(Html.DevExtreme().Popup()
+		.ID("customer-popup")
+		.WrapperAttr(new {@class="popup"})
+		.Width("auto")
+		.MaxWidth(400)
+		.Height("auto")
+		.ShowTitle(true)
+		.Title("-----------------------------------")
+		.Visible(false)
+		.DragEnabled(false)
+		.CloseOnOutsideClick(false)
+	)
+
+	@using (Html.DevExtreme().NamedTemplate("address-template-0"))
+	{
+	<div class="customer-popup-content">
+		<partial name="Partials/Customers/AddressForm" model="Model.AddressModel" />
+	</div>
+	}
+
+	@using (Html.DevExtreme().NamedTemplate("contact-template-0"))
+	{
+	<div class="customer-popup-content">
+		<partial name="Partials/Customers/ContactForm" model="Model.ContactModel" />
+	</div>
+	}
+
+	@using (Html.DevExtreme().NamedTemplate("document-template-0"))
+	{
+		<div class="customer-popup-content">
+			<partial name="Partials/Core/DocumentForm" model="Model.DocumentModel" />
+		</div>
+	}
+
+	<script type="text/javascript">
+		function showAddressForm(id) {
+		showPopup('address', 'Adres ' + (id == 0 ? 'Ekle' : 'Düzenle'), id)
+		}
+
+	function showContactForm(id) {
+		showPopup('contact', 'Yetkili Kişi ' + (id == 0 ? 'Ekle' : 'Düzenle'), id)
+		}
+
+	function showDocumentForm(id) {
+		showPopup('document', 'Evrak ' + (id == 0 ? 'Ekle':'Düzenle'), id)
+		}
+
+	function showPopup(type, title, id) {
+		var customerId = @(Model.Customer != null && Model.Customer.Id > 0 ? Model.Customer.Id : 0);
+		if (customerId == 0) {
+			swal("Uyarı", title.substr(0,1) + title.substr(1).toLocaleLowerCase() +"mek için müşteriyi kaydetmeniz gerekmekedir.", "warning");
+			return;
+		}
+		var popup = $("#customer-popup").dxPopup("instance");
+		popup.option("contentTemplate", $("#" + type + "-template-" + id));
+		popup.show();
+
+			$('.dx-toolbar-label .dx-item-content').text(title);
+			$(".customer-popup-content").find('*[data-action="close"]').click(function () { popup.hide(); });
+	}
+	</script>
+</div>
+
+
+<script>
+	function saveCustomer() {
+		$('#create-customer-form').submit();
+	}
+
+	function removeCustomer() {
+		swal("Silmek istediğinize emin misiniz?", {
+			buttons: {
+				cancel: "İptal",
+				catch: {
+					text: "Sil",
+					value: "remove",
+				}
+				},
+		})
+			.then((value) => {
+				 if (value == "remove") {
+					 swal("Siliniyor...");
+					$('#remove-customer-form').submit();
+				 }
+			 });
+		}
+</script>

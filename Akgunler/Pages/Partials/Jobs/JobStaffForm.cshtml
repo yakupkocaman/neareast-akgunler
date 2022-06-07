@@ -1,0 +1,119 @@
+﻿@model JobStaffModel
+
+<form id="create-jobstaff-form">
+	@Html.HiddenFor(m => m.JobId)
+	@Html.HiddenFor(m => m.JobStaffId)
+	@(Html.DevExtreme().Form<JobStaffModel>()
+		.Width(600)
+		.Items(items =>
+		{
+			items.AddGroup()
+				.Items(groupItems =>
+				{
+					groupItems.AddSimpleFor(m => m.StaffId)
+						.Editor(e => e
+							.DropDownBox()
+							.Placeholder("Seçiniz")
+							.ValueExpr("Id")
+							.Value((Model != null && Model.StaffId > 0) ? Model.StaffId.ToString() : "")
+							.DisplayExpr(new JS("StaffDataGridDisplayExpr"))
+							.DataSource(d => d.Mvc().Controller("Edit").LoadParams(new { Handler = "Staffs" }).Key("Id"))
+							.ShowClearButton(true)
+							.OnValueChanged("OnStaffDataGridValueChange")
+							.ContentTemplate(new TemplateName("EmbeddedStaffDataGrid"))
+						)
+						.IsRequired(false)
+						.Label(m => m.Text("Sürücü"));
+
+					groupItems.AddSimpleFor(m => m.TractorId)
+						.Editor(e => e
+							.DropDownBox()
+							.Placeholder("Seçiniz")
+							.ValueExpr("Id")
+							.Value((Model != null && Model.TractorId > 0) ? Model.TractorId.ToString() : "")
+							.DisplayExpr(new JS("VehicleTractorDataGridDisplayExpr"))
+							.DataSource(d => d.Mvc().Controller("Edit").LoadParams(new { Handler = "Vehicles", Type = "Tractor" }).Key("Id"))
+							.ShowClearButton(true)
+							.OnValueChanged("OnVehicleTractorDataGridValueChange")
+							.ContentTemplate(new TemplateName("EmbeddedVehicleTractorDataGrid"))
+						)
+						.IsRequired(false)
+						.Label(m => m.Text("Çekici"));
+
+					groupItems.AddSimpleFor(m => m.TrailerId)
+						.Editor(e => e
+							.DropDownBox()
+							.Placeholder("Seçiniz")
+							.ValueExpr("Id")
+							.Value((Model != null && Model.TrailerId > 0) ? Model.TrailerId.ToString() : "")
+							.DisplayExpr(new JS("VehicleTrailerDataGridDisplayExpr"))
+							.DataSource(d => d.Mvc().Controller("Edit").LoadParams(new { Handler = "Vehicles", Type = "Trailer" }).Key("Id"))
+							.ShowClearButton(true)
+							.OnValueChanged("OnVehicleTrailerDataGridValueChange")
+							.ContentTemplate(new TemplateName("EmbeddedVehicleTrailerDataGrid"))
+						)
+						.IsRequired(false)
+						.Label(m => m.Text("Dorse"));
+				});
+		})
+		.FormData(Model)
+)
+</form>
+<hr />
+<div class="text-center mt-3">
+	@(Html.DevExtreme().Button()
+		.Text("Sil")
+		.Type(ButtonType.Danger)
+		.OnClick(@<text>
+			function() { 
+
+				swal({
+					title: "Uyarı!",
+					text: "Silmek istediğinize emin misiniz?",
+					icon: "warning",
+					buttons: true,
+					dangerMode: true,
+				})
+				.then((willDelete) => {
+					if (willDelete) {
+						var jobstaffId = $('[name="JobStaffId"]').val();
+						var url = baseUrl + "api/jobstaff/delete/" + jobstaffId;
+						
+						$.post(url, {}).done(
+							function(d){
+								location.reload();
+							}	
+						);
+					} 
+				});
+			}
+		</text>)
+		.Width(60)
+	)
+	@(Html.DevExtreme().Button()
+		.Text("Vazgeç")
+		.Type(ButtonType.Normal)
+		.Width(130)
+		.ElementAttr("data-action", "close")
+	)
+
+	@(Html.DevExtreme().Button()
+		.Text("Kaydet")
+		.Type(ButtonType.Success)
+		.OnClick(@<text>
+			function() { 
+				var data = $('#create-jobstaff-form').serialize();
+
+				var jobstaffId = $('[name="JobStaffId"]').val();
+				var url = baseUrl + "api/jobstaff/" + (jobstaffId > 0 ? "update/" + jobstaffId : "create");
+						
+				$.post(url, data).done(
+					function(d){
+						location.reload();
+					}	
+				);
+				}
+		</text>)
+		.Width(130)
+	)
+</div>

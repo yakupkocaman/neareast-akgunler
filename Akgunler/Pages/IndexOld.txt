@@ -1,0 +1,162 @@
+﻿@page
+@model IndexModel
+@{
+	ViewData["Title"] = "Anasayfa";
+}
+
+@functions {
+	public class IndexModel : PageBaseModel
+	{
+		public List<Log> Logs { get; set; }
+
+		public DateTime StartDate = DateTime.Today.Date;
+		public DateTime EndDate = DateTime.Today.Date.AddDays(1).AddTicks(-1);
+
+		public string StartDateFormatted => StartDate.ToString("dd/MM/yyyy");
+		public string EndDateFormatted => EndDate.ToString("dd/MM/yyyy");
+
+		private readonly ILogService mLogService;
+
+		public IndexModel(ILogService logService) {
+			mLogService = logService;
+		}
+
+		public async Task<IActionResult> OnGetAsync(string start, string end)
+		{
+			if (!string.IsNullOrEmpty(start))
+			{
+				DateTime.TryParseExact(start, "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out StartDate);
+			}
+
+			if (!string.IsNullOrEmpty(end))
+			{
+				DateTime.TryParseExact(end, "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out EndDate);
+			}
+
+			Logs = await mLogService.GetLogsAsync(StartDate, EndDate);
+
+			return Page();
+		}
+	}
+}
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center can-block">
+					<h4 class="card-title mb-0">Sistem Günlüğü</h4>
+					<div id="reportrange" style="background: #fff; cursor: pointer; padding: 5px 10px; border: 1px solid #ccc; width: auto;font-size: 0.82rem">
+						<i class="mdi mdi-calendar-multiple"></i>&nbsp;
+						<span></span> <i class="mdi mdi-menu-down"></i>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="table-responsive">
+			<table id="report-table" class="table center-aligned-table">
+				<thead>
+					<tr class="bg-light">
+						<th class="border-bottom-0">Kategori</th>
+						<th class="border-bottom-0">Başlık</th>
+						<th class="border-bottom-0">Açıklama</th>
+						<th class="border-bottom-0">Kullanıcı Adı</th>
+						<th class="border-bottom-0">Ip Adresi</th>
+						<th class="border-bottom-0">Tarih</th>
+					</tr>
+				</thead>
+				<tbody>
+
+					@foreach (var log in Model.Logs)
+					{
+					<tr data-id="@log.Id">
+						<td class="border-bottom-0">@log.Category</td>
+						<td class="border-bottom-0">@log.Title</td>
+						<td class="border-bottom-0">@log.Message</td>
+						<td class="border-bottom-0">@log.Username</td>
+						<td class="border-bottom-0">@log.IpAddress</td>
+						<td class="border-bottom-0">@log.CreatedOn.ToString("dd/MM/yyyy HH:mm")</td>
+					</tr>
+					}
+
+				</tbody>
+			</table>
+		</div>
+	</div>
+</div>
+
+<script>
+	$(function () {
+		var isFirst = true;
+		var start = moment('@Model.StartDateFormatted', 'DD/MM/YYYY');
+		var end = moment('@Model.EndDateFormatted', 'DD/MM/YYYY');
+
+		function cb(start, end) {
+
+			$('#reportrange span').html(start.format('DD/MM/YYYY') + ' - ' + end.format('DD/MM/YYYY'));
+
+			if (isFirst) {
+				isFirst = false;
+			}
+			else {
+				location.href = "/index?start=" + start.format('DD/MM/YYYY') + "&end=" + end.format('DD/MM/YYYY');
+			}
+		}
+
+		$('#reportrange').daterangepicker({
+			startDate: start,
+			endDate: end,
+			opens: 'left',
+			ranges: {
+				'Bugün': [moment(), moment()],
+				'Dün': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+				'Son 7 Gün': [moment().subtract(6, 'days'), moment()],
+				'Son 30 Gün': [moment().subtract(29, 'days'), moment()],
+				'Bu Ay': [moment().startOf('month'), moment().endOf('month')],
+				'Geçen Ay': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+			}
+		}, cb);
+
+		cb(start, end);
+	});
+
+
+	(function ($) {
+		'use strict';
+		$(function () {
+			var table = $('#report-table').DataTable({
+				"aoColumnDefs": [{ "bSearchable": false, "aTargets": [1, 2, 3, 4] }],
+				"aLengthMenu": [
+					[5, 10, 15, -1],
+					[5, 10, 15, "Tümü"]
+				],
+				"iDisplayLength": 10,
+				"language": {
+					"url": "/js/datatable-tr.json"
+				}
+			});
+
+			$('#report-table tbody').on('mousedown touchstart', 'tr', function () {
+				if ($(this).hasClass('selected')) {
+					$(this).removeClass('selected');
+				}
+				else {
+					table.$('tr.selected').removeClass('selected');
+					$(this).addClass('selected');
+				}
+			});
+
+			$('#report-table tbody').on('mouseup touchend', 'tr', function () {
+				table.$('tr.selected').removeClass('selected');
+				//if ($(this).data('id')) {
+				//}
+			});
+
+		});
+	})(jQuery);
+</script>

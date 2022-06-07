@@ -1,0 +1,91 @@
+﻿@model ContactModel
+
+<form id="create-contact-form">
+	@Html.HiddenFor(m => m.CustomerId)
+	@Html.HiddenFor(m => m.ContactId)
+	@(Html.DevExtreme().Form<ContactModel>()
+		.Items(items =>
+		{
+			items.AddGroup()
+				.CssClass("first-group")
+				.Items(groupItems =>
+				{
+					groupItems.AddSimpleFor(m => m.FirstName).Label(m => m.Text("Ad")).IsRequired(true);
+					groupItems.AddSimpleFor(m => m.LastName).Label(m => m.Text("Soyad")).IsRequired(true);
+					groupItems.AddSimpleFor(m => m.Title).Label(m => m.Text("Ünvan")).IsRequired(false);
+					groupItems.AddSimpleFor(m => m.Phone1)
+						.Editor(e => e.TextBox()
+							.Mask("(000) 000 00 00")
+							.MaskRules(new { X = new JS("/[02-9]/") }))
+							.Label(m => m.Text("Telefon 1")).IsRequired(false);
+					groupItems.AddSimpleFor(m => m.Phone2)
+						.Editor(e => e.TextBox()
+							.Mask("(000) 000 00 00")
+							.MaskRules(new { X = new JS("/[02-9]/") }))
+							.Label(m => m.Text("Telefon 2")).IsRequired(false);
+					groupItems.AddSimpleFor(m => m.Email).Label(m => m.Text("E-mail")).IsRequired(false);
+					groupItems.AddSimpleFor(m => m.Note).Label(m => m.Text("Kısa Not")).IsRequired(false);
+				});
+
+		})
+		.FormData(Model)
+	)
+</form>
+<hr />
+<div class="text-center mt-3">
+	@(Html.DevExtreme().Button()
+		.Text("Sil")
+		.Type(ButtonType.Danger)
+		.OnClick(@<text>
+			function() { 
+
+				swal({
+					title: "Uyarı!",
+					text: "Silmek istediğinize emin misiniz?",
+					icon: "warning",
+					buttons: true,
+					dangerMode: true,
+				})
+				.then((willDelete) => {
+					if (willDelete) {
+						var contactId = $('[name="ContactId"]').val();
+						var url = baseUrl + "api/contact/delete/" + contactId;
+						
+						$.post(url, {}).done(
+							function(d){
+								location.reload();
+							}	
+						);
+					} 
+				});
+			}
+		</text>)
+		.Width(60)
+	)
+	@(Html.DevExtreme().Button()
+		.Text("Vazgeç")
+		.Type(ButtonType.Normal)
+		.Width(130)
+		.ElementAttr("data-action", "close")
+	)
+
+	@(Html.DevExtreme().Button()
+		.Text("Kaydet")
+		.Type(ButtonType.Success)
+		.OnClick(@<text>
+			function() { 
+				var data = $('#create-contact-form').serialize();
+
+				var contactId = $('[name="ContactId"]').val();
+				var url = baseUrl + "api/contact/" + (contactId > 0 ? "update/" + contactId : "create");
+						
+				$.post(url, data).done(
+					function(d){
+						location.reload();
+					}	
+				);
+				}
+		</text>)
+		.Width(130)
+	)
+</div>

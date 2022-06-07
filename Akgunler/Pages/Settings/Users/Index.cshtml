@@ -1,0 +1,109 @@
+﻿@page
+@model IndexModel
+@{
+	ViewData["Title"] = "Kullanıcılar";
+}
+
+@functions {
+	public class IndexModel : PageBaseModel
+	{
+		public List<User> Users;
+
+		private IRepository<User> mUserRepository;
+
+		public IndexModel(
+			IRepository<User> userRepository
+		) {
+			mUserRepository = userRepository;
+		}
+
+		public IActionResult OnGet()
+		{
+			Users = mUserRepository.Query()
+				.Include(x => x.UserRoles).ThenInclude(x => x.Role)
+				.ToList();
+
+			return Page();
+		}
+	}
+}
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center">
+					<h4 class="card-title mb-0">Kullanıcılar</h4>
+					<a class="btn btn-light btn-sm" asp-page="./edit">Yeni Ekle</a>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="table-responsive">
+			<table id="customers-table" class="table center-aligned-table">
+				<thead>
+					<tr class="bg-light">
+						<th class="border-bottom-0">Ad Soyad</th>
+						<th class="border-bottom-0">Kullanıcı Adı</th>
+						<th class="border-bottom-0">Yetkiler</th>
+						<th class="border-bottom-0">Durum</th>
+					</tr>
+				</thead>
+				<tbody>
+
+					@foreach (var user in Model.Users)
+					{
+						<tr data-id="@user.Id">
+							<td class="border-bottom-0"><a asp-page="./edit" asp-route-id="@user.Id">@user.FirstName @user.LastName</a></td>
+							<td class="border-bottom-0">@user.Username</td>
+							<td class="border-bottom-0">@string.Join(", ", user.UserRoles.Select(x => x.Role.Title).ToArray())</td>
+							<td class="border-bottom-0">@(user.IsActive ? "Aktif" : "Pasif")</td>
+						</tr>
+					}
+
+				</tbody>
+			</table>
+		</div>
+	</div>
+</div>
+
+
+<script>
+	(function ($) {
+		'use strict';
+		$(function () {
+			var table = $('#customers-table').DataTable({
+				"aoColumnDefs": [{ "bSearchable": false, "aTargets": [3] }],
+				"aLengthMenu": [
+					[10, 20, 50, 100, -1],
+					[10, 20, 50, 100, "Tümü"]
+				],
+				"iDisplayLength": 10,
+				"language": {
+					"url": "/js/datatable-tr.json"
+				}
+			});
+
+			$('#customers-table tbody').on('mousedown touchstart', 'tr', function () {
+				if ($(this).hasClass('selected')) {
+					$(this).removeClass('selected');
+				}
+				else {
+					table.$('tr.selected').removeClass('selected');
+					$(this).addClass('selected');
+				}
+			});
+
+			$('#customers-table tbody').on('mouseup touchend', 'tr', function () {
+				table.$('tr.selected').removeClass('selected');
+				//if ($(this).data('id')) {
+				//	console.log('test');
+				//}
+			});
+
+		});
+	})(jQuery);
+</script>

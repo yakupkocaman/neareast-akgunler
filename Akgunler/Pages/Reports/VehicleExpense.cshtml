@@ -1,0 +1,314 @@
+﻿@page
+@using ClosedXML.Excel
+@using Microsoft.AspNetCore.Hosting
+@model VehicleExpensePageModel
+
+@{
+	ViewData["Title"] = "Araç Masraf Raporu";
+	Layout = "~/Pages/Shared/_Layout.cshtml";
+}
+
+@functions
+{
+	public class VehicleExpensePageModel : PageModel
+	{
+		public int SelectedJobStatus = 1;
+		public JobStatusItem[] JobStatuses = new JobStatusItem[]
+		{
+			new JobStatusItem {Id = 1, Label = "Tümü"},
+			new JobStatusItem {Id = 2, Label = "Tamamlanan"},
+			new JobStatusItem {Id = 3, Label = "Devam Eden"}
+		};
+		public List<VehicleExpenseModel> Jobs { get; set; }
+
+		public DateTime StartDate = DateTime.Today.Date;
+		public DateTime EndDate = DateTime.Today.Date.AddDays(1).AddTicks(-1);
+
+		public string StartDateFormatted => StartDate.ToString("dd/MM/yyyy");
+		public string EndDateFormatted => EndDate.ToString("dd/MM/yyyy");
+
+		private readonly AkgunlerContext mContext;
+		private readonly string mWebRootPath;
+
+		public VehicleExpensePageModel(AkgunlerContext context, IWebHostEnvironment env)
+		{
+			mContext = context;
+			mWebRootPath = env.WebRootPath;
+		}
+
+		public void OnGet(string start, string end, int status = 1)
+		{
+			LoadData(start, end, status);
+		}
+
+		/*
+		public IActionResult OnGetExport(string start, string end, int status = 1)
+			{
+			LoadData(start, end, status);
+
+			if (Jobs == null || Jobs.Count == 0) return Page();
+
+			var colCount = 9;
+
+			var fileName = "AraçMasrafRaporu_" + StartDate.ToString("yyyyMMdd") + "_" + EndDate.ToString("yyyyMMdd") + ".xlsx";
+			var workbook = new XLWorkbook();
+			var ws = workbook.Worksheets.Add("Akgunler");
+			ws.ShowGridLines = false;
+
+			ws.Column(1).Width = 2.6;
+			ws.Column(2).Width = 30;
+			ws.Column(colCount + 2).Width = 2.6;
+			ws.Columns(3 + ":" + (colCount + 1)).Width = 42 / (colCount - 1);
+
+			var row2 = ws.Row(2);
+			row2.Cells(2 + ":" + (colCount + 1)).Style.Fill.BackgroundColor = XLColor.FromArgb(53, 92, 125);
+			row2.Height = 50;
+
+			var row5 = ws.Row(4);
+			row5.Cells(2 + ":" + (colCount + 1)).Style.Fill.BackgroundColor = XLColor.FromArgb(53, 92, 125);
+			row5.Cells(2 + ":" + (colCount + 1)).Style.Font.FontColor = XLColor.White;
+			row5.Cells(2 + ":" + (colCount + 1)).Style.Font.Bold = true;
+			row5.Cells(2 + ":" + (colCount + 1)).Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+			row5.Cells(2 + ":" + (colCount + 1)).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+			row5.Height = 30;
+
+			var imagePath = System.IO.Path.Combine(mWebRootPath, "img", "logo.png");
+
+			ws.AddPicture(imagePath)
+				.MoveTo(ws.Cell(2, 2).Address, 10, 13)
+			.Scale(0.8d);
+
+			var title = "Araç Masraf Raporu (" + StartDateFormatted + "-" + EndDateFormatted + ")";
+			ws.Range(4, 2, 4, 1 + colCount).Merge().Value = title;
+
+			var table = ws.Cell(5, 2).InsertTable(Jobs).SetShowTotalsRow();
+			table.Fields.First().TotalsRowLabel = "Toplam";
+			var fields = table.Fields.Where(x => x.Index > 1).ToList();
+
+			foreach (var field in fields)
+				{
+				field.TotalsRowFunction = XLTotalsRowFunction.Sum;
+			}
+
+			ws.Columns(3 + ":" + (colCount + 1)).AdjustToContents();
+
+			var memory = new System.IO.MemoryStream();
+			workbook.SaveAs(memory);
+			memory.Position = 0;
+
+			var mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+			return File(memory, mimeType, fileName);
+		}
+		*/
+
+		private void LoadData(string start, string end, int status)
+		{
+			SelectedJobStatus = status;
+
+			if (!string.IsNullOrEmpty(start))
+			{
+				DateTime.TryParseExact(start, "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out StartDate);
+				StartDate = StartDate.Date;
+			}
+
+			if (!string.IsNullOrEmpty(end))
+			{
+				DateTime.TryParseExact(end, "dd/MM/yyyy", null, System.Globalization.DateTimeStyles.None, out EndDate);
+				EndDate = EndDate.Date.AddDays(1).AddTicks(-1);
+			}
+			/*
+			var jobs = mContext.JobStaffs
+				.Include(x => x.Vehicle)
+				.Include(x => x.Job)
+				.Where(x => x.Job.StartDate >= StartDate && x.Job.StartDate <= EndDate)
+				.GroupJoin(mContext.Accounts, j => j.JobId, a => a.JobId, (j, a) => new { job = j, accounts = a })
+				.GroupBy(x => x.job.VehicleId)
+				.Select(x => new VehicleExpenseModel
+				{
+					RegistrationNo = x.First().job.Vehicle.RegistrationNo,
+					Model = x.First().job.Vehicle.Model,
+					ModelYear = x.First().job.Vehicle.ModelYear,
+					DocumentCount = x.Count(),
+					Mileage = Decimal.ToInt32(x.Where(y => y.job.FinishVehicleMileage.HasValue).Sum(y => (y.job.FinishVehicleMileage.Value - y.job.StartVehicleMileage))),
+					TotalEur = (decimal?)(x.Sum(y => y.accounts.Where(c => ((int?)c.CurrencyId).HasValue && c.CurrencyId == 3 && ((decimal?)c.Debit).HasValue).Sum(z => (decimal?)z.Debit ?? 0))) ?? 0,
+					TotalGbp = (decimal?)(x.Sum(y => y.accounts.Where(c => ((int?)c.CurrencyId).HasValue && c.CurrencyId == 1 && ((decimal?)c.Debit).HasValue).Sum(z => (decimal?)z.Debit ?? 0))) ?? 0,
+					TotalTry = (decimal?)(x.Sum(y => y.accounts.Where(c => ((int?)c.CurrencyId).HasValue && c.CurrencyId == 4 && ((decimal?)c.Debit).HasValue).Sum(z => (decimal?)z.Debit ?? 0))) ?? 0,
+					TotalUsd = (decimal?)(x.Sum(y => y.accounts.Where(c => ((int?)c.CurrencyId).HasValue && c.CurrencyId == 2 && ((decimal?)c.Debit).HasValue).Sum(z => (decimal?)z.Debit ?? 0))) ?? 0
+				}).ToList();
+			*/
+			var jobs = new List<VehicleExpenseModel>();
+			if (SelectedJobStatus == 1)
+			{
+				Jobs = jobs;
+			}
+			else if (SelectedJobStatus == 2)
+			{
+				Jobs = jobs.Where(x => x.IsActive).ToList();
+			}
+			else if (SelectedJobStatus == 3)
+			{
+				Jobs = jobs.Where(x => !x.IsActive).ToList();
+			}
+		}
+	}
+}
+
+
+<div class="row grid-margin report-header">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center can-block">
+					<h4 class="card-title mb-0">Araç Masraf Raporu</h4>
+
+					<div class="report-top">
+						<div class="dropdown">
+							@(Html.DevExtreme().SelectBox()
+								.DisplayExpr("Label")
+								.ValueExpr("Id")
+								.DataSource(Model.JobStatuses)
+								.Value(Model.SelectedJobStatus)
+								.OnValueChanged("onJobStatusChanged")
+							)
+						</div>
+						<div id="reportrange" class="report-range">
+							<i class="mdi mdi-calendar-multiple"></i>&nbsp;
+							<span></span> <i class="mdi mdi-menu-down"></i>
+						</div>
+						<button type="button" class="btn btn-icons btn-inverse-light btn-export" title="Excel'e Aktar" onclick="exportToExcel()"><i class="mdi mdi-file-excel"></i></button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="table-responsive">
+			<table id="report-table" class="table center-aligned-table">
+				<thead>
+					<tr class="bg-light">
+						<th class="border-bottom-0">Plaka</th>
+						<th class="border-bottom-0">Model</th>
+						<th class="border-bottom-0">Yıl</th>
+						<th class="border-bottom-0">Belge</th>
+						<th class="border-bottom-0">Km</th>
+						<th class="border-bottom-0">EUR</th>
+						<th class="border-bottom-0">GBP</th>
+						<th class="border-bottom-0">TRY</th>
+						<th class="border-bottom-0">USD</th>
+					</tr>
+				</thead>
+				<tbody>
+
+					@foreach (var job in Model.Jobs)
+					{
+					<tr data-id="@job.RegistrationNo">
+						<td class="border-bottom-0">@job.RegistrationNo</td>
+						<td class="border-bottom-0">@job.Model</td>
+						<td class="border-bottom-0">@job.ModelYear</td>
+						<td class="border-bottom-0">@job.DocumentCount</td>
+						<td class="border-bottom-0">@job.Mileage</td>
+						<td class="border-bottom-0">@job.TotalEur</td>
+						<td class="border-bottom-0">@job.TotalGbp</td>
+						<td class="border-bottom-0">@job.TotalTry</td>
+						<td class="border-bottom-0">@job.TotalUsd</td>
+					</tr>
+					}
+
+				</tbody>
+			</table>
+		</div>
+	</div>
+</div>
+
+<script>
+	var isFirst = true;
+	var start = moment('@Model.StartDateFormatted', 'DD/MM/YYYY');
+	var end = moment('@Model.EndDateFormatted', 'DD/MM/YYYY');
+	var status = @Model.SelectedJobStatus;
+
+	$(function () {
+		function cb(start, end) {
+
+			$('#reportrange span').html(start.format('DD/MM/YYYY') + ' - ' + end.format('DD/MM/YYYY'));
+
+		if (isFirst) {
+			isFirst = false;
+		}
+		else {
+			location.href = "/reports/vehicleexpense?start=" + start.format('DD/MM/YYYY') + "&end=" + end.format('DD/MM/YYYY') + "&status=" + status;
+		}
+	}
+
+	$('#reportrange').daterangepicker({
+		startDate: start,
+			endDate: end,
+			opens: 'left',
+			ranges: {
+			'Bugün': [moment(), moment()],
+				'Dün': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+				'Son 7 Gün': [moment().subtract(6, 'days'), moment()],
+				'Son 30 Gün': [moment().subtract(29, 'days'), moment()],
+				'Bu Ay': [moment().startOf('month'), moment().endOf('month')],
+				'Geçen Ay': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+			},
+			"locale": {
+				"format": "DD/MM/YYYY",
+				"separator": " - ",
+				"applyLabel": "Uygula",
+				"cancelLabel": "Vazgeç",
+				"fromLabel": "Dan",
+				"toLabel": "a",
+				"customRangeLabel": "Tarih Aralığı",
+				"daysOfWeek": ["Pz", "Pt", "Sl", "Çr", "Pr", "Cm", "Ct"],
+				"monthNames": ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"],
+				"firstDay": 1
+			}
+		}, cb);
+
+		cb(start, end);
+
+	});
+
+	(function ($) {
+		'use strict';
+		$(function () {
+			var table = $('#report-table').DataTable({
+				"aoColumnDefs": [{ "bSearchable": false, "aTargets": [1, 2, 3, 4] }],
+				"aLengthMenu": [
+					[10, 20, 50, 100, -1],
+					[10, 20, 50, 100, "Tümü"]
+				],
+				"iDisplayLength": 10,
+				"language": {
+					"url": "/js/datatable-tr.json"
+				}
+			});
+
+			$('#report-table tbody').on('mousedown touchstart', 'tr', function () {
+				if ($(this).hasClass('selected')) {
+					$(this).removeClass('selected');
+				}
+				else {
+					table.$('tr.selected').removeClass('selected');
+					$(this).addClass('selected');
+					}
+				});
+
+				$('#report-table tbody').on('mouseup touchend', 'tr', function () {
+				table.$('tr.selected').removeClass('selected');
+			});
+		});
+	})(jQuery);
+
+	function onJobStatusChanged(data) {
+		status = data.value;
+		location.href = "/reports/vehicleexpense?start=" + start.format('DD/MM/YYYY') + "&end=" + end.format('DD/MM/YYYY') + "&status=" + status;
+	}
+	
+	function exportToExcel() {
+		location.href = "/reports/vehicleexpense?handler=export&start=" + start.format('DD/MM/YYYY') + "&end=" + end.format('DD/MM/YYYY') + "&status=" + status;
+	}
+</script>

@@ -1,0 +1,467 @@
+﻿@page
+@model EditModel
+
+@{
+	ViewData["Title"] = "Yeni Personel";
+	Layout = "~/Pages/Shared/_Layout.cshtml";
+}
+
+@functions
+{
+	public class EditModel : PageBaseModel
+	{
+		[BindProperty]
+		public Staff Staff { get; set; }
+		public int CurrentStaffId;
+		public int[] ForLangs;
+
+		public List<Document> Documents;
+		public DocumentModel DocumentModel = new DocumentModel();
+
+		private readonly IStaffService mStaffService;
+		private readonly IStaffDocumentService mStaffDocumentService;
+		private readonly IRepositoryWithTypedId<Country, string> mCountryRepository;
+		private readonly IRepository<Currency> mCurrencyRepository;
+		private readonly IRepository<DocumentType> mDocumentTypeRepository;
+		private readonly IRepository<Department> mDepartmentRepository;
+		private readonly IRepository<User> mUserRepository;
+		private readonly IRepository<DriversLicenseType> mDriversLicenseTypeRepository;
+		private readonly IRepository<Language> mLanguageRepository;
+
+		public EditModel(
+			IStaffService staffService,
+			IStaffDocumentService staffDocumentService,
+			IRepositoryWithTypedId<Country, string> countryRepository,
+			IRepository<Currency> currencyRepository,
+			IRepository<DocumentType> documentTypeRepository,
+			IRepository<Department> departmentRepository,
+			IRepository<User> userRepository,
+			IRepository<DriversLicenseType> driversLicenseTypeRepository,
+			IRepository<Language> languageRepository
+		)
+		{
+			mStaffService = staffService;
+			mStaffDocumentService = staffDocumentService;
+			mCountryRepository = countryRepository;
+			mCurrencyRepository = currencyRepository;
+			mDocumentTypeRepository = documentTypeRepository;
+			mDepartmentRepository = departmentRepository;
+			mUserRepository = userRepository;
+			mDriversLicenseTypeRepository = driversLicenseTypeRepository;
+			mLanguageRepository = languageRepository;
+		}
+
+		public IActionResult OnGet(int? id)
+		{
+			if (id.HasValue)
+			{
+				CurrentStaffId = id.Value;
+				DocumentModel.StaffId = CurrentStaffId;
+
+				Staff = mStaffService.GetFull(id.Value);
+
+				Staff.ForeignLanguages = string.IsNullOrEmpty(Staff.ForeignLangs)?new string[0]:Staff.ForeignLangs.Split(',');
+
+				if (Staff == null)
+				{
+					return NotFound();
+				}
+				else
+				{
+
+					Documents = mStaffDocumentService.GetAllDocuments(CurrentStaffId);
+				}
+			}
+			else
+			{
+				Staff = new Staff { Birthday = DateTime.Now, DriversLicenseExpiry = DateTime.Now };
+			}
+
+			LoadPageData();
+			return Page();
+		}
+
+		public IActionResult OnPost(int? id)
+		{
+			if (!ModelState.IsValid)
+			{
+				LoadPageData();
+				return Page();
+			}
+			if (id.HasValue)
+			{
+				CurrentStaffId = id.Value;
+				Staff.Id = id.Value;
+				Staff.ForeignLangs = string.Join(',', Staff.ForeignLanguages == null ? new string[0] : Staff.ForeignLanguages);
+
+				mStaffService.Update(Staff);
+				SetFlashMessage("Personel başarıyla güncellendi", "success");
+
+
+				return RedirectToPage("./Index");
+			}
+			else
+			{
+
+				Staff.ForeignLangs = string.Join(',', Staff.ForeignLanguages == null ? new string[0] : Staff.ForeignLanguages);
+				mStaffService.Insert(Staff);
+				SetFlashMessage("Personel başarıyla kaydedildi", "success");
+				if (Staff.Id > 0)
+				{
+					return RedirectToPage("./Edit", new { id = Staff.Id });
+				}
+			}
+
+			return Page();
+		}
+
+		public IActionResult OnPostDelete(int? id)
+		{
+			if (id == null)
+			{
+				return NotFound();
+			}
+
+			Staff = mStaffService.GetFull(id.Value);
+			Staff.DeletedOn = DateTime.Now;
+
+			mStaffService.Update(Staff);
+
+			if (Staff != null)
+			{
+				return RedirectToPage("./Index");
+			}
+
+			return Page();
+		}
+
+		public DocumentModel GetDocumentModel(int staffId, Document document)
+		{
+			var documentModel = new DocumentModel();
+			documentModel.DocumentId = document.Id;
+			documentModel.FileName = document.FileName;
+			documentModel.DocumentTypeId = document.DocumentTypeId.Value;
+			documentModel.Name = document.Name;
+			documentModel.Total = document.Total;
+			documentModel.CurrencyId = document.CurrencyId.Value;
+			documentModel.DocumentTypes = DocumentModel.DocumentTypes;
+			documentModel.Currencies = DocumentModel.Currencies;
+
+			documentModel.StaffId = staffId;
+
+			return documentModel;
+		}
+
+		private void LoadPageData()
+		{
+			DocumentModel.Currencies = mCurrencyRepository.Query().ToList();
+			DocumentModel.DocumentTypes = mDocumentTypeRepository.Query().Where(x => x.DocumentGroup == DocumentGroup.Staff).ToList();
+
+			DocumentModel.CurrencyId = DocumentModel.Currencies.First().Id;
+			DocumentModel.DocumentTypeId = DocumentModel.DocumentTypes.First().Id;
+			DocumentModel.Date = DateTime.Now;
+
+			var countries = mCountryRepository.Query().ToList();
+
+			var countryCT = countries.First(x => x.Id == "CT");
+			var countryTR = countries.First(x => x.Id == "TR");
+			var countriesOther = countries.Where(x => x.Id != "CT" && x.Id != "TR").OrderBy(x => x.Nationality).ToList();
+			var countriesAll = new[] { countryCT, countryTR }.Concat(countriesOther);
+
+			ViewData["DepartmentId"] = new SelectList(mDepartmentRepository.Query(), "Id", "Name");
+			ViewData["NationalityId"] = new SelectList(countriesAll, "Id", "Nationality");
+			ViewData["UserId"] = new SelectList(mUserRepository.Query(), "Id", "UserId");
+			ViewData["DriversLicenseTypeId"] = new SelectList(mDriversLicenseTypeRepository.Query(), "Id", "Name");
+			ViewData["Languages"] = new SelectList(mLanguageRepository.Query(), "Id", "Name");
+		}
+	}
+}
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center mb-3">
+					<h4 class="card-title mb-0">@(Model.CurrentStaffId > 0 ? ("Düzenle - " + Model.Staff.FirstName + " " + Model.Staff.LastName) : "Yeni Personel")</h4>
+					<div>
+						<button class="btn btn-primary btn-sm" onclick="saveStaff()">Kaydet</button>
+						@if (Model.CurrentStaffId > 0)
+						{
+							<button class="btn btn-danger btn-sm" onclick="removeStaff()">Sil</button>
+						}
+						<a class="btn btn-light btn-sm d-none d-md-inline-block" asp-page="./index">Listeye Dön</a>
+					</div>
+				</div>
+				<div>
+					<form method="post" id="remove-staff-form" asp-page-handler="Delete" asp-route-id="@Model.CurrentStaffId"></form>
+					<form method="post" id="create-staff-form">
+						@(Html.DevExtreme().Form<Staff>()
+							.Items(items =>
+							{
+								items.AddGroup()
+									.ColCount(2)
+									.Items(groupItems =>
+									{
+										groupItems.AddGroup().Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.FirstName).Label(m => m.Text("Ad")).IsRequired(true);
+											secondGroupItems.AddSimpleFor(m => m.LastName).Label(m => m.Text("Soyad")).IsRequired(true);
+
+											secondGroupItems.AddSimpleFor(m => m.NationalityId)
+												.ColSpan(2)
+												.Editor(e => e
+													.SelectBox()
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.DataSource(ViewBag.NationalityId)
+													.Value(@Model.Staff?.NationalityId?.ToString()))
+													.IsRequired(false)
+													.Label(m => m.Text("Uyruk"));
+
+											secondGroupItems.AddSimpleFor(m => m.IdentityNo).Label(m => m.Text("Vatandaşlık No")).IsRequired(false);
+											secondGroupItems.AddSimpleFor(m => m.DocumentNo).Label(m => m.Text("Pasaport No")).IsRequired(false);
+											secondGroupItems.AddSimpleFor(m => m.Birthday)
+												.Editor(e => e
+												.DateBox()
+												.DisplayFormat("dd/MM/yyyy"))
+												.Label(m => m.Text("Doğum Tarihi")).IsRequired(false);
+
+											
+											secondGroupItems.AddSimpleFor(m => m.ForeignLanguages)
+												.ColSpan(2)
+												.Editor(e => e
+													.TagBox()
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.ShowSelectionControls(true)
+													.ApplyValueMode(EditorApplyValueMode.UseButtons)
+													.DataSource(ViewBag.Languages))
+													.IsRequired(false)
+													.Label(m => m.Text("Yabancı Dil"));
+										});
+
+										groupItems.AddGroup().Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.DepartmentId)
+													.ColSpan(2)
+													.Editor(e => e
+														.SelectBox()
+														.DisplayExpr("Text")
+														.ValueExpr("Value")
+														.DataSource(ViewBag.DepartmentId)
+														.Value(@Model.Staff?.DepartmentId.ToString()))
+														.IsRequired(true)
+														.Label(m => m.Text("Departman"));
+
+											secondGroupItems.AddSimpleFor(m => m.Title).Label(m => m.Text("Ünvan")).IsRequired(false);
+
+											secondGroupItems.AddSimpleFor(m => m.DriversLicenseTypeId)
+													.ColSpan(2)
+													.Editor(e => e
+														.SelectBox()
+														.DisplayExpr("Text")
+														.ValueExpr("Value")
+														.DataSource(ViewBag.DriversLicenseTypeId)
+														.Value(@Model.Staff?.DriversLicenseTypeId.ToString()))
+														.IsRequired(false)
+														.Label(m => m.Text("Ehliyet Sınıfı"));
+
+
+											secondGroupItems.AddSimpleFor(m => m.DriversLicenseNo).Label(m => m.Text("Ehliyet No")).IsRequired(false);
+
+											secondGroupItems.AddSimpleFor(m => m.DriversLicenseExpiry)
+												.Editor(e => e
+												.DateBox()
+												.DisplayFormat("dd/MM/yyyy"))
+												.Label(m => m.Text("Ehliyet Geçerlilik")).IsRequired(false);
+
+											secondGroupItems.AddSimpleFor(m => m.IsActive)
+												.Editor(e => e
+													.Switch()
+													.Width(80)
+													.SwitchedOnText("Aktif")
+													.SwitchedOffText("Pasif"))
+													.Label(m => m.Text("Durum"));
+										});
+
+
+									});
+
+
+								items.AddGroup()
+									.Caption("")
+									.ColCount(2)
+									.Items(groupItems =>
+									{
+										groupItems.AddGroup()
+											.ColCount(2)
+											.Items(seconGroupItems =>
+											{
+												seconGroupItems.AddSimpleFor(m => m.Address)
+													.ColSpan(2)
+													.Editor(e => e.TextArea().Height(126))
+													.Label(m => m.Text("Adres")).IsRequired(false);
+											});
+
+
+										groupItems.AddGroup()
+											.ColCount(2)
+											.Items(seconGroupItems =>
+											{
+												seconGroupItems.AddSimpleFor(m => m.Phone1)
+													.Editor(e => e.TextBox()
+														.Mask("(000) 000 00 00")
+														.MaskRules(new { X = new JS("/[02-9]/") }))
+														.Label(m => m.Text("Telefon KKTC 1")).IsRequired(false);
+												seconGroupItems.AddSimpleFor(m => m.Phone2)
+													.Editor(e => e.TextBox()
+														.Mask("(000) 000 00 00")
+														.MaskRules(new { X = new JS("/[02-9]/") }))
+														.Label(m => m.Text("Telefon TC 1")).IsRequired(false);
+												seconGroupItems.AddSimpleFor(m => m.Phone3)
+													.Editor(e => e.TextBox()
+														.Mask("(000) 000 00 00")
+														.MaskRules(new { X = new JS("/[02-9]/") }))
+														.Label(m => m.Text("Telefon KKTC 2")).IsRequired(false);
+												seconGroupItems.AddSimpleFor(m => m.Phone4)
+													.Editor(e => e.TextBox()
+														.Mask("(000) 000 00 00")
+														.MaskRules(new { X = new JS("/[02-9]/") }))
+														.Label(m => m.Text("Telefon TC 2")).IsRequired(false);
+														
+												seconGroupItems.AddSimpleFor(m => m.Email1).Label(m => m.Text("Email 1")).IsRequired(false);
+												seconGroupItems.AddSimpleFor(m => m.Email2).Label(m => m.Text("Email 2")).IsRequired(false);
+											});
+
+
+
+
+									});
+
+							})
+							.FormData(Model.Staff)
+						)
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="table-responsive">
+				<table class="table center-aligned-table">
+					<thead>
+						<tr class="bg-light">
+							<th class="border-bottom-0">Açıklama</th>
+							<th class="border-bottom-0">Evrak Tipi</th>
+							<th class="border-bottom-0">Evrak Tarihi</th>
+							<th class="border-bottom-0">Tutar</th>
+							<th class="border-bottom-0 table-icon-btn-col" width="60">
+								<i onclick="showDocumentForm(0)" class="table-icon-btn mdi mdi-plus-box"></i>
+							</th>
+						</tr>
+					</thead>
+					<tbody>
+						@if (Model.Documents != null)
+						{
+							foreach (var doc in Model.Documents)
+							{
+								<tr>
+									<td>@doc.Name</td>
+									<td>@doc.DocumentType.Name</td>
+									<td>@doc.Date.ToString("dd/MM/yyyy")</td>
+									<td>@doc.Total @doc.Currency.Sign</td>
+									<td class="table-icon-btn-col">
+										<i onclick="showDocumentForm(@doc.Id)" class="table-icon-btn mdi mdi-pencil-box-outline"></i>
+
+										@using (Html.DevExtreme().NamedTemplate("document-template-" + doc.Id))
+										{
+											<div class="staff-popup-content">
+												<partial name="Partials/Core/DocumentForm" model="Model.GetDocumentModel(Model.Staff.Id, doc)" />
+											</div>
+										}
+									</td>
+								</tr>
+							}
+
+						}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div id="popup">
+	@(Html.DevExtreme().Popup()
+		.ID("staff-popup")
+		.ElementAttr("class", "popup")
+		.Width("auto")
+		.MaxWidth(400)
+		.Height("auto")
+		.ShowTitle(true)
+		.Title("-----------------------------------")
+		.Visible(false)
+		.DragEnabled(false)
+		.CloseOnOutsideClick(false)
+	)
+
+
+	@using (Html.DevExtreme().NamedTemplate("document-template-0"))
+	{
+		<div class="staff-popup-content">
+			<partial name="Partials/Core/DocumentForm" model="Model.DocumentModel" />
+		</div>
+	}
+
+	<script type="text/javascript">
+		function showDocumentForm(id) {
+			showPopup('document', 'Evrak ' + (id == 0 ? 'Ekle':'Düzenle'), id)
+		}
+
+		function showPopup(type, title, id) {
+			var staffId = @(Model.Staff != null && Model.Staff.Id > 0 ? Model.Staff.Id: 0);
+			if (staffId == 0) {
+				swal("Uyarı", title.substr(0, 1) + title.substr(1).toLocaleLowerCase() + "mek için personeli kaydetmeniz gerekmekedir.", "warning");
+				return;
+			}
+			var popup = $("#staff-popup").dxPopup("instance");
+			popup.option("contentTemplate", $("#" + type + "-template-" + id));
+			popup.show();
+
+			$('.dx-toolbar-label .dx-item-content').text(title);
+			$(".staff-popup-content").find('*[data-action="close"]').click(function () { popup.hide(); });
+		}
+	</script>
+</div>
+
+<script>
+	function saveStaff() {
+		$('#create-staff-form').submit();
+	}
+
+	function removeStaff() {
+		swal("Silmek istediğinize emin misiniz?", {
+			buttons: {
+				cancel: "İptal",
+				catch: {
+					text: "Sil",
+					value: "remove",
+				}
+				},
+		})
+			.then((value) => {
+				 if (value == "remove") {
+					 swal("Siliniyor...");
+					$('#remove-staff-form').submit();
+				 }
+			 });
+		}
+</script>
+
+
+

@@ -1,0 +1,166 @@
+﻿@model FreightModel
+
+<form id="create-freight-form">
+    @Html.HiddenFor(m => m.JobId)
+    @Html.HiddenFor(m => m.FreightId)
+    @(Html.DevExtreme().Form<FreightModel>()
+		.OnInitialized("initFreightAddressSelects("+
+			(!string.IsNullOrEmpty(Model.ShippingCountryId) ? ( "'" + Model.ShippingCountryId + "'") : "null" )+", "+(Model.ShippingProvinceId.HasValue ? Model.ShippingProvinceId : "null" )+", "+(Model.ShippingDistrictId.HasValue ? Model.ShippingDistrictId: "null" ) +", "+
+			(!string.IsNullOrEmpty(Model.DeliveryCountryId) ? ( "'" + Model.DeliveryCountryId + "'") : "null" )+", "+(Model.DeliveryProvinceId.HasValue ? Model.DeliveryProvinceId : "null" )+", "+(Model.DeliveryDistrictId.HasValue ? Model.DeliveryDistrictId: "null" )
+		+")")
+		.Items(items =>
+		{
+			items.AddGroup()
+				.CssClass("first-group")
+				.ColCount(2)
+				.Items(groupItems =>
+				{
+					groupItems.AddSimpleFor(m => m.Title).Label(m => m.Text("Başlık")).IsRequired(true);
+					groupItems.AddSimpleFor(m => m.Type).Label(m => m.Text("Tür")).IsRequired(true);
+					groupItems.AddSimpleFor(m => m.Note).ColSpan(2).CssClass("mb-3").Label(m => m.Text("Kısa Not")).IsRequired(false);
+
+					groupItems.AddGroup()
+						.Caption("Yükleme Adresi")
+						.Items( addressGroupItems =>  
+						{
+							addressGroupItems.AddSimpleFor(m => m.ShippingCountryId).Template(
+								@<text>
+									@Html.DropDownListFor(x => x.ShippingCountryId, new SelectListItem[]{ new SelectListItem {Text = "Seçiniz", Value = ""}}, new { id="shippingCountrySelect", @class = "form-control"})
+								</text>)
+								.IsRequired(false)
+								.Label(m => m.Text("Ülke"));
+
+							addressGroupItems.AddSimpleFor(m => m.ShippingProvinceId).Template(
+								@<text>
+									@Html.DropDownListFor(x => x.ShippingProvinceId, new SelectListItem[]{ new SelectListItem {Text = "Seçiniz", Value = ""}}, new { id="shippingProvinceSelect", @class = "form-control"})
+								</text>)
+								.IsRequired(false)
+								.Label(m => m.Text("İl"));
+
+							addressGroupItems.AddSimpleFor(m => m.ShippingDistrictId).Template(
+								@<text>
+									@Html.DropDownListFor(x => x.ShippingDistrictId, new SelectListItem[]{ new SelectListItem {Text = "Seçiniz", Value = ""}}, new { id="shippingDistrictSelect", @class = "form-control"})
+								</text>)
+								.IsRequired(false)
+								.Label(m => m.Text("İlçe"));
+                        
+							addressGroupItems.AddSimpleFor(m => m.ShippingAddressLine)
+								.Editor(e => e.TextArea())
+								.Label(m => m.Text("Adres")).IsRequired(true);
+						});
+
+					
+					groupItems.AddGroup()
+                        .Caption("Teslimat Adresi")
+                        .Items( addressGroupItems =>  
+                        {
+                            addressGroupItems.AddSimpleFor(m => m.DeliveryCountryId).Template(
+                                @<text>
+                                    @Html.DropDownListFor(x => x.DeliveryCountryId, new SelectListItem[]{ new SelectListItem {Text = "Seçiniz", Value = ""}}, new { id="deliveryCountrySelect", @class = "form-control"})
+                                </text>)
+                                .IsRequired(false)
+                                .Label(m => m.Text("Ülke"));
+
+                            addressGroupItems.AddSimpleFor(m => m.DeliveryProvinceId).Template(
+                                @<text>
+                                    @Html.DropDownListFor(x => x.DeliveryProvinceId, new SelectListItem[]{ new SelectListItem {Text = "Seçiniz", Value = ""}}, new { id="deliveryProvinceSelect", @class = "form-control"})
+                                </text>)
+                                .IsRequired(false)
+                                .Label(m => m.Text("İl"));
+
+                            addressGroupItems.AddSimpleFor(m => m.DeliveryDistrictId).Template(
+                                @<text>
+                                    @Html.DropDownListFor(x => x.DeliveryDistrictId, new SelectListItem[]{ new SelectListItem {Text = "Seçiniz", Value = ""}}, new { id="deliveryDistrictSelect", @class = "form-control"})
+                                </text>)
+                                .IsRequired(false)
+                                .Label(m => m.Text("İlçe"));
+                        
+                            addressGroupItems.AddSimpleFor(m => m.DeliveryAddressLine)
+                                .Editor(e => e.TextArea())
+                                .Label(m => m.Text("Adres")).IsRequired(true);
+                        });
+
+					groupItems.AddGroup()
+						.ColSpan(2)
+						.ColCount(2)
+						.Caption("İç Nakliye")
+						.Items( secondGroupItems =>  
+						{
+							secondGroupItems.AddSimpleFor(m => m.IsDomesticShipping)
+								.Editor(e => e
+									.Switch()
+									.Width(80)
+									.SwitchedOnText("Evet")
+									.SwitchedOffText("Hayır"))
+									.Label(m => m.Text("İç Nakliye Mi?"));
+
+							secondGroupItems.AddSimpleFor(m => m.DomesticShippingPrice)
+                                .Editor(e => e.NumberBox().Min(0).Step(0.01))
+                                .Label(m => m.Text("Ücret")).IsRequired(false);
+
+						});
+
+				});
+
+		})
+		.FormData(Model)
+	)
+</form>
+<hr />
+<div class="text-center mt-3">
+	@(Html.DevExtreme().Button()
+		.Text("Sil")
+		.Type(ButtonType.Danger)
+		.OnClick(@<text>
+			function() { 
+
+				swal({
+					title: "Uyarı!",
+					text: "Silmek istediğinize emin misiniz?",
+					icon: "warning",
+					buttons: true,
+					dangerMode: true,
+				})
+				.then((willDelete) => {
+					if (willDelete) {
+						var freightId = $('[name="FreightId"]').val();
+						var url = baseUrl + "api/freight/delete/" + freightId;
+						
+						$.post(url, {}).done(
+							function(d){
+								location.reload();
+							}	
+						);
+					} 
+				});
+			}
+		</text>)
+		.Width(60)
+	)
+	@(Html.DevExtreme().Button()
+		.Text("Vazgeç")
+		.Type(ButtonType.Normal)
+		.Width(130)
+		.ElementAttr("data-action", "close")
+	)
+
+	@(Html.DevExtreme().Button()
+		.Text("Kaydet")
+		.Type(ButtonType.Success)
+		.OnClick(@<text>
+			function() { 
+				var data = $('#create-freight-form').serialize();
+
+				var freightId = $('[name="FreightId"]').val();
+				var url = baseUrl + "api/freight/" + (freightId > 0 ? "update/" + freightId : "create");
+						
+				$.post(url, data).done(
+					function(d){
+						location.reload();
+					}	
+				);
+				}
+		</text>)
+		.Width(130)
+	)
+</div>

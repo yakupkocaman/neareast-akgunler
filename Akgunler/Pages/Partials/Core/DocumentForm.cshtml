@@ -1,0 +1,148 @@
+﻿@model DocumentModel
+
+<form id="create-document-form" enctype="multipart/form-data">
+	@Html.HiddenFor(m => m.CustomerId)
+	@Html.HiddenFor(m => m.VehicleId)
+	@Html.HiddenFor(m => m.StaffId)
+	@Html.HiddenFor(m => m.DocumentId)
+	@if (Model.DocumentId == 0)
+	{
+	@(Html.DevExtreme().FileUploader()
+		.ID("file-uploader")
+		.Name("document")
+		.Multiple(false)
+		.Accept("image/*")
+		.SelectButtonText("Dosya Seçiniz")
+		.LabelText("Yada Buraya Sürükleyin")
+		.UploadedMessage("Yüklendi")
+		.UploadFailedMessage("Bir hata oluştu")
+		.UploadMode(FileUploadMode.Instantly)
+		.UploadUrl("/api/document/upload")
+		.OnUploaded(@<text>
+			function (e) {
+				try {
+					var response = e.request.responseText;
+					var json = JSON.parse(response);
+					var docId = json.Id;
+
+					if(docId>0) {
+						$('#document-save-btn').dxButton('instance').option('disabled', false);
+						$('#DocumentId').val(docId);
+						return;
+					}
+				}
+				catch{}
+
+				swal("Hata!", "Dosya yüklenirken bir sorun oluştu", "error");
+				location.reload();
+			}
+		</text>)
+	)
+	}
+	else {
+	<div style="text-align:center; max-height: 100px; margin-bottom: 20px;">
+		<a href="~/Uploads/@Model.FileName" target="_blank">
+			<img src="~/Uploads/@Model.FileName" style="width: auto; height: 100px;" />
+		</a>
+	</div>
+	}
+
+	@(Html.DevExtreme().Form<DocumentModel>()
+		.Items(items =>
+		{
+			items.AddGroup()
+				.CssClass("first-group")
+				.Items(groupItems =>
+				{
+					groupItems.AddSimpleFor(m => m.Name).Label(m => m.Text("Açıklama")).IsRequired(true);
+					groupItems.AddSimpleFor(m => m.DocumentTypeId)
+						.Editor(e => e
+							.SelectBox()
+							.DisplayExpr("Name")
+							.ValueExpr("Id")
+							.DataSource(Model.DocumentTypes))
+							.IsRequired(false)
+							.Label(m => m.Text("Evrak Tipi"));
+					groupItems.AddSimpleFor(m => m.Date)
+							.Editor(e => e
+							.DateBox()
+							.DisplayFormat("dd/MM/yyyy"))
+							.Label(m => m.Text("Evrak Tarihi"))
+							.IsRequired(false);
+					groupItems.AddSimpleFor(m => m.Total).Label(m => m.Text("Evrak Tutarı")).IsRequired(false);
+					groupItems.AddSimpleFor(m => m.CurrencyId)
+						.Editor(e => e
+							.SelectBox()
+							.DisplayExpr("Name")
+							.ValueExpr("Id")
+							.DataSource(Model.Currencies))
+							.IsRequired(false)
+							.Label(m => m.Text("Birim"));
+				});
+
+		})
+		.FormData(Model)
+	)
+</form>
+<hr />
+<div class="text-center mt-3">
+	@(Html.DevExtreme().Button()
+		.Text("Sil")
+		.Type(ButtonType.Danger)
+		.OnClick(@<text>
+			function() { 
+
+				swal({
+					title: "Uyarı!",
+					text: "Silmek istediğinize emin misiniz?",
+					icon: "warning",
+					buttons: true,
+					dangerMode: true,
+				})
+				.then((willDelete) => {
+					if (willDelete) {
+						var documentId = $('#DocumentId').val();
+						var url = baseUrl + "api/document/delete/" + documentId;
+						
+						$.post(url, {}).done(
+							function(d){
+								location.reload();
+							}	
+						);
+					} 
+				});
+			}
+		</text>)
+		.Width(60)
+	)
+	@(Html.DevExtreme().Button()
+		.Text("Vazgeç")
+		.Type(ButtonType.Normal)
+		.Width(130)
+		.ElementAttr("data-action", "close")
+	)
+
+	@(Html.DevExtreme().Button()
+		.ID("document-save-btn")
+		.Text("Kaydet")
+		.Type(ButtonType.Success)
+		.Disabled(Model.DocumentId == 0)
+		.OnClick(@<text>
+			function() { 
+				var data = $('#create-document-form').serialize();
+
+				var documentId = $('#DocumentId').val();
+				if(documentId > 0) {
+					var url = baseUrl + "api/document/update/" + documentId;
+						
+					$.post(url, data).done(
+						function(d){
+							location.reload();
+						}	
+					);
+				}
+			}
+		</text>)
+		.Width(130)
+	)
+</div>

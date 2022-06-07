@@ -1,0 +1,304 @@
+﻿@page
+@model EditModel
+
+@{
+	ViewData["Title"] = "Kullanıcı Düzenle";
+	Layout = "~/Pages/Shared/_Layout.cshtml";
+}
+
+@functions
+{
+	public class EditModel : PageBaseModel
+	{
+		[BindProperty]
+		public User CurrentUser { get; set; }
+		public int CurrentUserId;
+
+		[BindProperty]
+		public int CurrentRoleId { get; set; }
+
+		private readonly IUserService mUserService;
+		private readonly IRepository<Role> mRoleRepository;
+		private readonly IRepository<UserRole> mUserRoleRepository;
+		private readonly IRepository<Staff> mStaffRepository;
+
+		public EditModel(
+			IUserService userService,
+			IRepository<Role> roleRepository,
+			IRepository<UserRole> userRoleRepository,
+			IRepository<Staff> staffRepository
+		)
+		{
+			mUserService = userService;
+			mRoleRepository = roleRepository;
+			mUserRoleRepository = userRoleRepository;
+			mStaffRepository = staffRepository;
+		}
+
+		public IActionResult OnGet(int? id)
+		{
+			if (id.HasValue)
+			{
+				CurrentUserId = id.Value;
+
+				CurrentUser = mUserService.GetUserById(id.Value);
+
+				if (CurrentUser == null)
+				{
+					return NotFound();
+				}
+				else
+				{
+					CurrentRoleId = CurrentUser.UserRoles.Select(x => x.RoleId).FirstOrDefault();
+					CurrentUser.PasswordAgain = CurrentUser.Password;
+				}
+			}
+
+			LoadPageData();
+			return Page();
+		}
+
+		public IActionResult OnPost(int? id)
+		{
+			if (!ModelState.IsValid || !(CurrentRoleId > 0))
+			{
+				LoadPageData();
+				return Page();
+			}
+			if (id.HasValue)
+			{
+				CurrentUserId = id.Value;
+				CurrentUser.Id = id.Value;
+
+				mUserService.Update(CurrentUser);
+
+				return RedirectToPage("./Index");
+			}
+			else
+			{
+				mUserService.Insert(CurrentUser);
+				if (CurrentUser.Id > 0)
+				{
+					mUserRoleRepository.Add(new UserRole { UserId = CurrentUser.Id, RoleId = CurrentRoleId });
+					mUserRoleRepository.SaveChange();
+
+					return RedirectToPage("./Edit", new { id = CurrentUser.Id });
+				}
+			}
+
+			return Page();
+		}
+
+		public IActionResult OnPostDelete(int? id)
+		{
+			if (id == null)
+			{
+				return NotFound();
+			}
+			
+			CurrentUser = Models.Core.User.Get<User>(id.Value);
+			
+			var userRoles = mUserService.GetAllByUserId(id.Value);
+
+			try
+			{
+				foreach (var userRole in userRoles)
+				{
+					UserRole.Delete(userRole);
+				}
+			}
+			catch (Exception)
+			{
+			}
+
+			if (CurrentUser != null && Models.Core.User.Delete(CurrentUser))
+			{
+				return RedirectToPage("./Index");
+			}
+
+			return Page();
+		}
+
+		private void LoadPageData()
+		{
+			ViewData["RoleId"] = new SelectList(mRoleRepository.Query(), "RoleId", "Title");
+			ViewData["StaffId"] = mStaffRepository.Query().ToList();
+		}
+	}
+}
+@*
+<script>
+	@{
+		List<string> staffs = new List<string>();
+		foreach (var staff in ViewBag.StaffId)
+		{
+			staffs.Add("{ id: " + staff.StaffId + ", firstName: '" + staff.FirstName + "', lastName: '" + staff.LastName + "', fullName: '" + staff.FirstName + " " + staff.LastName + "' }");
+		}
+
+		<text>@Html.Raw("window.staffs = [" + string.Join(", ", staffs) + "];")</text>
+	}
+</script>
+*@
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center mb-3">
+					<h4 class="card-title mb-0">@(Model.CurrentUserId > 0 ? ("Düzenle - " + Model.CurrentUser.Username) : "Yeni Kullanıcı")</h4>
+					<div>
+						<button class="btn btn-primary btn-sm" onclick="saveUserRole()">Kaydet</button>
+						@if (Model.CurrentUserId > 1)
+						{
+							<button class="btn btn-danger btn-sm" onclick="removeUserRole()">Sil</button>
+						}
+						<a class="btn btn-light btn-sm d-none d-md-inline-block" asp-page="./index">Listeye Dön</a>
+					</div>
+				</div>
+				<div>
+					<form method="post" id="remove-user-form" asp-page-handler="Delete" asp-route-id="@Model.CurrentUserId"></form>
+					<form method="post" id="create-user-form">
+						<input type="hidden" asp-for="CurrentRoleId" />
+						@(Html.DevExtreme().Form<User>()
+							.ID("create-form")
+							.Items(items =>
+							{
+								items.AddGroup()
+									.CssClass("first-group")
+									.ColCount(2)
+									.Items(groupItems =>
+									{
+										groupItems.AddGroup().Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.StaffId)
+												.Editor(e => e
+													.SelectBox()
+													.SearchEnabled(true)
+													.OnValueChanged(@<text>
+														function (d) {
+															var staffs = d.component.getDataSource().items();
+															var id = d.value;
+															if (id == null) {
+																$("input[name='FirstName']").val('');
+																$("input[name='LastName']").val('');
+															}
+															else {
+																var staff = staffs.find(o => o.StaffId === parseInt(id.toString()));
+																$("input[name='FirstName']").val(staff.FirstName);
+																$("input[name='LastName']").val(staff.LastName);
+																
+																var username = url_slug(staff.FullName.toLowerCase()).replace('-', '.');
+																$("input[name='Username']").val(username);
+															}
+														}
+													</text>)
+													.DisplayExpr("FullName")
+													.ValueExpr("StaffId")
+													.DataSource(ViewBag.StaffId))
+													.IsRequired(false)
+													.Label(m => m.Text("Personel"));
+
+											//secondGroupItems.AddGroup().Template("<div id=\"staffSelectBoxContainer\"></div>");
+											//secondGroupItems.AddSimpleFor(m => m.StaffId).Label(m => m.Text("Personel")).IsRequired(false);
+											secondGroupItems.AddSimpleFor(m => m.FirstName).Label(m => m.Text("Ad")).IsRequired(false);
+											secondGroupItems.AddSimpleFor(m => m.LastName).Label(m => m.Text("Soyad")).IsRequired(false);
+
+											secondGroupItems.AddSimpleFor(m => m.IsActive)
+												.Editor(e => e
+													.Switch()
+													.Width(80)
+													.SwitchedOnText("Aktif")
+													.SwitchedOffText("Pasif"))
+													.Label(m => m.Text("Durum"));
+										});
+
+										groupItems.AddGroup().Items(secondGroupItems =>
+										{
+
+											secondGroupItems.AddSimple()
+												.Editor(e => e
+													.SelectBox()
+													.OnValueChanged(@<text>
+														function (d) {
+															$('input[name="CurrentRoleId"]').val(d.value);
+														}
+													</text>)
+													.DisplayExpr("Text")
+													.ValueExpr("Value")
+													.Value(Model.CurrentRoleId.ToString())
+													.DataSource(ViewBag.RoleId))
+													.IsRequired(false)
+													.Label(m => m.Text("Yetki"));
+
+											secondGroupItems.AddSimpleFor(m => m.Username).Label(m => m.Text("Kullanıcı Adı")).IsRequired(false);
+											secondGroupItems.AddSimpleFor(m => m.Password).Editor(e => e.TextBox().Mode(TextBoxMode.Password)).Label(m => m.Text("Şifre")).IsRequired(false);
+											secondGroupItems.AddSimpleFor(m => m.PasswordAgain).Editor(e => e.TextBox().Mode(TextBoxMode.Password)).Label(m => m.Text("Şifre (Tekrar)")).IsRequired(false);
+
+										});
+
+
+									});
+
+							})
+							.FormData(Model.CurrentUser)
+						)
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<script>
+	
+	@*
+	var staffs = [@Html.Raw(string.Join(", ", staffs))];
+
+	$(function () {
+		var selectedStaffId = @Model.CurrentUser.StaffId;
+		$("#staffSelectBoxContainer").dxSelectBox({
+			name: 'StaffId',
+			dataSource: staffs,
+			valueExpr: 'id',
+			displayExpr: 'fullName',
+			searchEnabled: true,
+			searchExpr: ['fullName'],
+
+			onValueChanged: function (e) {
+				var id = e.value;
+				if (id == null) {
+					$("input[name='FirstName']").val('');
+					$("input[name='LastName']").val('');
+				}
+				else {
+					var staff = staffs.find(o => o.id === parseInt(id.toString()));
+					$("input[name='FirstName']").val(staff.firstName);
+					$("input[name='LastName']").val(staff.lastName);
+				}
+			}
+		});
+		$("#staffSelectBoxContainer").dxSelectBox("instance").value = selectedStaffId.toString();
+	});
+	*@
+
+	function saveUserRole() {
+		$('#create-user-form').submit();
+	}
+
+	function removeUserRole() {
+		swal("Silmek istediğinize emin misiniz?", {
+			buttons: {
+				cancel: "İptal",
+				catch: {
+					text: "Sil",
+					value: "remove",
+				}
+				},
+		})
+			.then((value) => {
+				 if (value == "remove") {
+					 swal("Siliniyor...");
+					$('#remove-user-form').submit();
+				 }
+			 });
+		}
+</script>

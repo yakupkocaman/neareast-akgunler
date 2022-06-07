@@ -1,0 +1,107 @@
+﻿@model AccountModel
+
+<form id="create-account-form">
+	@Html.HiddenFor(m => m.JobId)
+	@Html.HiddenFor(m => m.AccountId)
+	@(Html.DevExtreme().Form<AccountModel>()
+		.Items(items =>
+		{
+			items.AddGroup()
+				.CssClass("first-group")
+				.Items(groupItems =>
+				{
+					groupItems.AddSimpleFor(m => m.Note).Label(m => m.Text("Açıklama")).IsRequired(true);
+
+					groupItems.AddSimpleFor(m => m.Date)
+						.Editor(e => e
+							.DateBox()
+							.DisplayFormat("dd/MM/yyyy")
+							.Type(DateBoxType.Date)
+							.Width("100%")
+							.Value(DateTime.Now))
+							.Label(m => m.Text("Tarih")).IsRequired(false);
+
+					groupItems.AddSimpleFor(m => m.AccountTypeId)
+						.Editor(e => e
+							.SelectBox()
+							.DisplayExpr("Name")
+							.ValueExpr("Id")
+							.DataSource(Model.AccountTypes))
+							.IsRequired(false)
+							.Label(m => m.Text("İşlem"));
+
+					groupItems.AddSimpleFor(m => m.Debit).Label(m => m.Text("Borç")).IsRequired(true);
+					groupItems.AddSimpleFor(m => m.Credit).Label(m => m.Text("Alacak")).IsRequired(true);
+
+					groupItems.AddSimpleFor(m => m.CurrencyId)
+						.Editor(e => e
+							.SelectBox()
+							.DisplayExpr("Name")
+							.ValueExpr("Id")
+							.DataSource(Model.Currencies))
+							.IsRequired(false)
+							.Label(m => m.Text("Birim"));
+				});
+
+		})
+		.FormData(Model)
+	)
+</form>
+<hr />
+<div class="text-center mt-3">
+	@(Html.DevExtreme().Button()
+		.Text("Sil")
+		.Type(ButtonType.Danger)
+		.OnClick(@<text>
+			function() { 
+
+				swal({
+					title: "Uyarı!",
+					text: "Silmek istediğinize emin misiniz?",
+					icon: "warning",
+					buttons: true,
+					dangerMode: true,
+				})
+				.then((willDelete) => {
+					if (willDelete) {
+						var accountId = $('[name="AccountId"]').val();
+						var url = baseUrl + "api/account/delete/" + accountId;
+						
+						$.post(url, {}).done(
+							function(d){
+								location.reload();
+							}	
+						);
+					} 
+				});
+			}
+		</text>)
+		.Width(60)
+	)
+	@(Html.DevExtreme().Button()
+		.Text("Vazgeç")
+		.Type(ButtonType.Normal)
+		.Width(130)
+		.ElementAttr("data-action", "close")
+	)
+
+	@(Html.DevExtreme().Button()
+		.Text("Kaydet")
+		.Type(ButtonType.Success)
+		.OnClick(@<text>
+			function() { 
+				var data = $('#create-account-form').serialize();
+
+				var accountId = $('[name="AccountId"]').val();
+				var url = baseUrl + "api/account/" + (accountId > 0 ? "update/" + accountId : "create");
+						
+				$.post(url, data).done(
+					function(d){
+						location.reload();
+					}	
+				);
+				}
+		</text>)
+		.Width(130)
+	)
+</div>

@@ -1,0 +1,124 @@
+﻿@model AddressModel
+
+
+<form id="create-address-form">
+	@Html.HiddenFor(m => m.CustomerId)
+	@Html.HiddenFor(m => m.AddressId)
+	@(Html.DevExtreme().Form<AddressModel>()
+		.OnInitialized("initAddressSelects("+(!string.IsNullOrEmpty(Model.CountryId) ? ( "'" + Model.CountryId + "'") : "null" )+", "+(Model.ProvinceId.HasValue ? Model.ProvinceId : "null" )+", "+(Model.DistrictId.HasValue ? Model.DistrictId: "null" )+")")
+		.Items(items =>
+		{
+			items.AddGroup()
+				.CssClass("first-group")
+				.Items(groupItems =>
+				{
+					groupItems.AddSimpleFor(m => m.Name).Label(m => m.Text("Başlık")).IsRequired(false);
+					groupItems.AddSimpleFor(m => m.AddressTypeId)
+						.Editor(e => e
+							.SelectBox()
+							.DisplayExpr("Name")
+							.ValueExpr("Id")
+							.DataSource(Model.AddressTypes))
+							.IsRequired(false)
+							.Label(m => m.Text("Adres Tipi"));
+
+					groupItems.AddSimpleFor(m => m.CountryId).Template(
+						@<text>
+							@Html.DropDownListFor(x => x.CountryId, new SelectListItem[]{ new SelectListItem {Text = "Seçiniz", Value = ""}}, new { id="countrySelect", @class = "form-control"})
+						</text>)
+						.IsRequired(false)
+						.Label(m => m.Text("Ülke"));
+
+					groupItems.AddSimpleFor(m => m.ProvinceId).Template(
+						@<text>
+							@Html.DropDownListFor(x => x.ProvinceId, new SelectListItem[]{ new SelectListItem {Text = "Seçiniz", Value = ""}}, new { id="provinceSelect", @class = "form-control"})
+						</text>)
+						.IsRequired(false)
+						.Label(m => m.Text("İl"));
+
+					groupItems.AddSimpleFor(m => m.DistrictId).Template(
+						@<text>
+							@Html.DropDownListFor(x => x.DistrictId, new SelectListItem[]{ new SelectListItem {Text = "Seçiniz", Value = ""}}, new { id="districtSelect", @class = "form-control"})
+						</text>)
+						.IsRequired(false)
+						.Label(m => m.Text("İlçe"));
+						
+					groupItems.AddSimpleFor(m => m.AddressLine)
+						.Editor(e => e.TextArea())
+						.Label(m => m.Text("Adres")).IsRequired(true);
+
+					groupItems.AddSimpleFor(m => m.PostalCode).Label(m => m.Text("Posta Kodu")).IsRequired(false);
+					groupItems.AddSimpleFor(m => m.Note).Label(m => m.Text("Kısa Not")).IsRequired(false);
+
+					groupItems.AddSimpleFor(m => m.IsActive)
+						.Editor(e => e
+							.Switch()
+							.Width(80)
+							.SwitchedOnText("Aktif")
+							.SwitchedOffText("Pasif"))
+							.Label(m => m.Text("Durum"));
+				});
+
+		})
+		.FormData(Model)
+	)
+</form>
+<hr />
+<div class="text-center mt-3">
+	@(Html.DevExtreme().Button()
+		.Text("Sil")
+		.Type(ButtonType.Danger)
+		.OnClick(@<text>
+			function() { 
+
+				swal({
+					title: "Uyarı!",
+					text: "Silmek istediğinize emin misiniz?",
+					icon: "warning",
+					buttons: true,
+					dangerMode: true,
+				})
+				.then((willDelete) => {
+					if (willDelete) {
+						var addressId = $('[name="AddressId"]').val();
+						var url = baseUrl + "api/address/delete/" + addressId;
+						
+						$.post(url, {}).done(
+							function(d){
+								location.reload();
+							}	
+						);
+					} 
+				});
+			}
+		</text>)
+		.Width(60)
+	)
+	@(Html.DevExtreme().Button()
+		.Text("Vazgeç")
+		.Type(ButtonType.Normal)
+		.Width(100)
+		.ElementAttr("data-action", "close")
+	)
+
+	@(Html.DevExtreme().Button()
+		.Text("Kaydet")
+		.Type(ButtonType.Success)
+		.OnClick(@<text>
+			function() { 
+				var data = $('#create-address-form').serialize();
+
+				var addressId = $('[name="AddressId"]').val();
+				var url = baseUrl + "api/address/" + (addressId > 0 ? "update/" + addressId : "create");
+						
+				$.post(url, data).done(
+					function(d){
+						location.reload();
+					}	
+				);
+				}
+		</text>)
+		.Width(100)
+	)
+</div>
+

@@ -1,0 +1,102 @@
+﻿@page
+@model IndexModel
+@{
+	ViewData["Title"] = "Müşteriler";
+}
+
+@functions {
+	public class IndexModel : PageBaseModel
+	{
+		public List<Customer> Customers;
+
+		private readonly ICustomerService mCustomerService;
+
+		public IndexModel(
+			ICustomerService customerService
+		)
+		{
+			mCustomerService = customerService;
+		}
+
+		public IActionResult OnGet()
+		{
+			Customers =  mCustomerService.GetAllWithGroup();
+			return Page();
+		}
+
+		[HttpGet]
+        public IActionResult OnGetCustomers(DataSourceLoadOptions loadOptions) {
+			var query = mCustomerService.GetAllWithGroup();
+
+            return new OkObjectResult(DataSourceLoader.Load(query, loadOptions));
+        }
+	}
+}
+
+<div class="row grid-margin">
+	<div class="col-12">
+		<div class="card">
+			<div class="card-body">
+				<div class="d-flex justify-content-between align-items-center">
+					<h4 class="card-title mb-0">Müşteriler</h4>
+					<a class="btn btn-light btn-sm" asp-page="./edit">Yeni Ekle</a>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+
+@(Html.DevExtreme().DataGrid<Customer>()
+    .DataSource(d => d.Mvc().Controller("Index").LoadParams(new { Handler = "Customers" }).Key("Id"))
+    .RemoteOperations(true)
+    .Columns(columns => {
+
+        columns.AddFor(m => m.Id)
+			.Alignment(HorizontalAlignment.Left)
+			.SortOrder(SortOrder.Desc)
+			.Width(60)
+			.Caption("Id");
+
+        columns.AddFor(m => m.Name)
+			.Caption("Ad");
+
+        columns.AddFor(m => m.Title)
+			.Caption("Unvan");
+
+        columns.AddFor(m => m.Group.Name)
+			.Caption("Müşteri Grubu");
+
+        columns.AddFor(m => m.IsActive)
+			.FalseText("Pasif")
+			.TrueText("Aktif")
+			.Caption("Durum");
+    })
+    .FilterRow(f => f.Visible(true))
+    .HeaderFilter(f => f.Visible(false))
+    .GroupPanel(p => p.Visible(false))
+    .Scrolling(s => s.Mode(GridScrollingMode.Virtual))
+	.Paging(paging => paging.PageSize(10))
+    .Pager(pager => {
+        pager.Visible(true);
+        pager.ShowPageSizeSelector(true);
+        pager.AllowedPageSizes(new JS("[10, 20, 50]"));
+        pager.ShowNavigationButtons(true);
+    })
+	.Selection(s => s.Mode(SelectionMode.Single))
+    .HoverStateEnabled(true)
+    .ShowBorders(true)
+	.ShowRowLines(true)
+    .Grouping(g => g.AutoExpandAll(false))
+	.OnSelectionChanged("onSelectionChanged")
+	.NoDataText("Veri bulunamadı")
+)
+
+<script>
+    function onSelectionChanged(selectedItems) {
+        var data = selectedItems.selectedRowsData[0];
+        if(data) {
+			window.location.href = baseUrl + "customers/edit?id=" + data.Id;
+        }
+    }
+</script>
