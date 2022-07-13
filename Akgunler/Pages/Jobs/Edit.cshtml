@@ -15,7 +15,6 @@
 		public int CurrentJobId;
 
 		public List<Customer> Customers;
-		public List<JobStaff> JobStaffs;
 		public List<Freight> Freights;
 		public List<Account> Accounts;
 
@@ -24,7 +23,6 @@
 		public AccountModel AccountModel = new AccountModel();
 
 		private readonly IJobService mJobService;
-		private readonly IJobStaffService mJobStaffService;
 		private readonly IFreightService mFreightService;
 		private readonly IAccountService mAccountService;
 		private readonly IStaffService mStaffService;
@@ -43,7 +41,6 @@
 
 		public EditModel(
 			IJobService jobService,
-			IJobStaffService jobStaffService,
 			IFreightService freightService,
 			IAccountService accountService,
 			IStaffService staffService,
@@ -62,7 +59,6 @@
 		)
 		{
 			mJobService = jobService;
-			mJobStaffService = jobStaffService;
 			mFreightService = freightService;
 			mAccountService = accountService;
 			mStaffService = staffService;
@@ -97,7 +93,6 @@
 				}
 				else
 				{
-					JobStaffs = mJobStaffService.GetByJobId(CurrentJobId);
 					Freights = mFreightService.GetByJobId(CurrentJobId);
 					Accounts = mAccountService.GetByJobId(CurrentJobId);
 				}
@@ -106,15 +101,6 @@
 			{
 				Job = new Job { JobTypeId = 1 };
 			}
-
-			/*
-			if (Job != null && (Job.ExchangeRateUsd == 0 || Job.ExchangeRateEur == 0))
-			{
-				dynamic rates = LoadExchange();
-				Job.ExchangeRateUsd = rates.Usd;
-				Job.ExchangeRateEur = rates.Eur;
-			}
-			*/
 
 			LoadPageData();
 			return Page();
@@ -170,7 +156,7 @@
 				return NotFound();
 			}
 
-			Job = Job.Get<Job>(id.Value);
+			Job = mJobService.GetFull(id.Value);
 			Job.DeletedOn = DateTime.Now;
 
 			mJobService.Update(Job);
@@ -199,14 +185,28 @@
 
 			var uncompletedJobs = mJobRepository.Query()
 				.Where(x => x.Status != "Tamamlandı")
-				.Include(x => x.JobStaffs).ThenInclude(x => x.Tractor)
-				.Include(x => x.JobStaffs).ThenInclude(x => x.Trailer)
+				.Include(x => x.Tractor)
+				.Include(x => x.Trailer)
 				.ToList();
 
-			var inUseVehicleIds = uncompletedJobs.SelectMany(x => x.JobStaffs.Select(x => x.Trailer))
-				.Concat(uncompletedJobs.SelectMany(x => x.JobStaffs.Select(x => x.Tractor)))
-				.Select(x => x.Id)
-				.ToList();
+			List<int> inUseVehicleIds = new List<int>();
+
+			if(type == "Tractor")
+			{
+				inUseVehicleIds = uncompletedJobs.Select(x => x.Tractor)
+					.Concat(uncompletedJobs.Select(x => x.Tractor))
+					.Where(x => x != null)
+					.Select(x => x.Id)
+					.ToList();
+			}
+			else
+			{
+				inUseVehicleIds = uncompletedJobs.Select(x => x.Trailer)
+					.Concat(uncompletedJobs.Select(x => x.Trailer))
+					.Where(x => x != null)
+					.Select(x => x.Id)
+					.ToList();
+			}
 
 			vehicles = vehicles.Where(x => !inUseVehicleIds.Where(y => y == x.Id).Any()).ToList();
 
@@ -224,8 +224,9 @@
 
 			var inUseStaffIds = mJobRepository.Query()
 				.Where(x => x.Status != "Tamamlandı")
-				.Include(x => x.JobStaffs).ThenInclude(x => x.Staff)
-				.SelectMany(x => x.JobStaffs.Select(x => x.Staff))
+				.Include(x => x.Staff)
+				.Select(x => x.Staff)
+				.Where(x => x != null)
 				.Select(x => x.Id)
 				.ToList();
 			
@@ -240,15 +241,13 @@
 			return new OkObjectResult(DataSourceLoader.Load(staffs, loadOptions));
 		}
 
-		public JobStaffModel GetJobStaffModel(int jobId, JobStaff jobStaff)
+		public JobStaffModel GetJobStaffModel(int jobId, Job job)
 		{
 			var jobStaffModel = new JobStaffModel();
-			jobStaffModel.JobStaffId = jobStaff.Id;
-			jobStaffModel.StaffId = jobStaff.StaffId;
-			jobStaffModel.TractorId = jobStaff.TractorId;
-			jobStaffModel.TrailerId = jobStaff.TrailerId;
-
-			jobStaffModel.JobId = jobStaff.JobId;
+			jobStaffModel.JobId = job.Id;
+			jobStaffModel.StaffId = job.StaffId.Value;
+			jobStaffModel.TractorId = job.TractorId.Value;
+			jobStaffModel.TrailerId = job.TrailerId.Value;
 
 			return jobStaffModel;
 		}
@@ -313,7 +312,7 @@
 
 			var statuses = new []
 			{
-				new { Name = "Beklemede" },
+				new { Name = "Rezerve" },
 				new { Name = "Tamamlandı" },
 				new { Name = "İptal" },
 				new { Name = "Gidiş" },
@@ -397,6 +396,9 @@
 							{
 								items.AddSimpleFor(m => m.RowVersion).CssClass("hidden-input");
 								items.AddSimpleFor(m => m.TransferTypeId).CssClass("hidden-input");
+								items.AddSimpleFor(m => m.StaffId).CssClass("hidden-input");
+								items.AddSimpleFor(m => m.TractorId).CssClass("hidden-input");
+								items.AddSimpleFor(m => m.TrailerId).CssClass("hidden-input");
 								items.AddGroup()
 									.ColCount(2)
 									.Items(groupItems =>
@@ -505,6 +507,26 @@
 													.Label(m => m.Text("Dönüş Gemi"));
 										});
 
+										
+										groupItems.AddGroup().ColSpan(2).ColCount(2).Items(secondGroupItems =>
+										{
+											secondGroupItems.AddSimpleFor(m => m.DepartureShipDate)
+												.Editor(e => e
+												.DateBox()
+												.DisplayFormat("dd/MM/yyyy HH:mm")
+												.Type(DateBoxType.DateTime)
+												.Width("100%"))
+												.Label(m => m.Text("Gemi Biniş Tarihi")).IsRequired(false);
+
+											secondGroupItems.AddSimpleFor(m => m.ArrivalShipDate)
+												.Editor(e => e
+												.DateBox()
+												.DisplayFormat("dd/MM/yyyy HH:mm")
+												.Type(DateBoxType.DateTime)
+												.Width("100%"))
+												.Label(m => m.Text("Gemi Biniş Tarihi")).IsRequired(false);
+										});
+
 										groupItems.AddGroup().ColSpan(2).ColCount(2).Items(secondGroupItems =>
 										{
 											secondGroupItems.AddSimpleFor(m => m.CustomsId)
@@ -584,7 +606,7 @@
 							<th class="border-bottom-0">Çekici</th>
 							<th class="border-bottom-0">Dorse</th>
 							<th class="border-bottom-0 table-icon-btn-col" width="60">
-								@if (!Model.Job.IsCancelled && Model.JobStaffs != null && Model.JobStaffs.Count < 1)
+								@if (!Model.Job.IsCancelled && Model.Job.Staff == null)
 								{
 									<i onclick="showJobStaffForm(0)" class="table-icon-btn mdi mdi-plus-box"></i>
 								}
@@ -592,27 +614,23 @@
 						</tr>
 					</thead>
 					<tbody>
-						@if (Model.JobStaffs != null)
+						@if (Model.Job.Staff != null)
 						{
-							foreach (var jobStaff in Model.JobStaffs)
-							{
-								<tr>
-									<td>@jobStaff.Staff.FullName <span style="color: #989898;"> < @jobStaff.Staff?.Department?.Name @jobStaff.Staff?.Phone1 > </span></td>
-									<td>@jobStaff.Tractor.RegistrationNo <span style="color: #989898;"> < @jobStaff.Tractor?.Make?.Name @jobStaff.Tractor?.Model @jobStaff.Tractor?.ModelYear @jobStaff.Tractor?.Color?.Name > </span></td>
-									<td>@jobStaff.Trailer.RegistrationNo <span style="color: #989898;"> < @jobStaff.Trailer?.VehicleType?.Name @jobStaff.Trailer?.Make?.Name @jobStaff.Trailer?.Model @jobStaff.Trailer?.ModelYear @jobStaff.Trailer?.Color?.Name > </span></td>
-									<td class="table-icon-btn-col">
-										<i onclick="showJobStaffForm(@jobStaff.Id)" class="table-icon-btn mdi mdi-pencil-box-outline"></i>
+						<tr>
+								<td>@Model.Job.Staff.FullName <span style="color: #989898;"> < @Model.Job.Staff?.Department?.Name @Model.Job.Staff?.Phone1 > </span></td>
+								<td>@Model.Job.Tractor.RegistrationNo <span style="color: #989898;"> < @Model.Job.Tractor?.Make?.Name @Model.Job.Tractor?.Model @Model.Job.Tractor?.ModelYear @Model.Job.Tractor?.Color?.Name > </span></td>
+								<td>@Model.Job.Trailer.RegistrationNo <span style="color: #989898;"> < @Model.Job.Trailer?.VehicleType?.Name @Model.Job.Trailer?.Make?.Name @Model.Job.Trailer?.Model @Model.Job.Trailer?.ModelYear @Model.Job.Trailer?.Color?.Name > </span></td>
+								<td class="table-icon-btn-col">
+									<i onclick="showJobStaffForm(@Model.Job.Id)" class="table-icon-btn mdi mdi-pencil-box-outline"></i>
 
-										@using (Html.DevExtreme().NamedTemplate("jobstaff-template-" + jobStaff.Id))
-										{
-											<div class="job-popup-content">
-												<partial name="Partials/Jobs/JobStaffForm" model="Model.GetJobStaffModel(Model.Job.Id, jobStaff)" />
-											</div>
-										}
-									</td>
-								</tr>
-							}
-
+									@using (Html.DevExtreme().NamedTemplate("jobstaff-template-" + Model.Job.Id))
+									{
+										<div class="job-popup-content">
+											<partial name="Partials/Jobs/JobStaffForm" model="Model.GetJobStaffModel(Model.Job.Id, Model.Job)" />
+										</div>
+									}
+								</td>
+							</tr>
 						}
 					</tbody>
 				</table>
@@ -736,7 +754,7 @@
 <div id="popup">
 	@(Html.DevExtreme().Popup()
 		.ID("job-popup")
-		.ElementAttr("class", "popup")
+		.WrapperAttr(new {@class="popup"})
 		.Width("auto")
 		.MaxWidth(800)
 		.Height("auto")
@@ -923,18 +941,15 @@
 		isVehicleTractorFirstOpen = true,
 		isVehicleTrailerFirstOpen = true;
 
-	@if (Model.JobStaffs != null)
+	@if (Model.Job.Staff != null)
 	{
-		foreach (var jobStaff in Model.JobStaffs)
-		{
-			var selectedStaff = (jobStaff == null || jobStaff.JobId == 0 ? "" : (jobStaff.Staff?.FirstName + " " + jobStaff.Staff?.LastName + " < " + jobStaff.Staff?.Department?.Name + " " + jobStaff.Staff?.Phone1 + " > "));
-			var selectedTractor = (jobStaff == null || jobStaff.JobId == 0 ? "" : (jobStaff.Tractor?.RegistrationNo + " < " + jobStaff.Tractor?.Make?.Name + " " + jobStaff.Tractor?.Model + " " + jobStaff.Tractor?.ModelYear + " " + jobStaff.Tractor?.Color?.Name + " > "));
-			var selectedTrailer = (jobStaff == null || jobStaff.JobId == 0 ? "" : (jobStaff.Trailer?.RegistrationNo + " < " + string.Join(" ", (new string[] {jobStaff.Trailer?.VehicleType?.Name, jobStaff.Trailer?.Make?.Name, jobStaff.Trailer?.Model, jobStaff.Trailer?.ModelYear.ToString(), jobStaff.Trailer?.Color?.Name}).Where(x => !string.IsNullOrEmpty(x))) + " > "));
+		var selectedStaff = (Model.Job == null || Model.Job.Id == 0 ? "" : (Model.Job.Staff?.FirstName + " " + Model.Job.Staff?.LastName + " < " + Model.Job.Staff?.Department?.Name + " " + Model.Job.Staff?.Phone1 + " > "));
+		var selectedTractor = (Model.Job == null || Model.Job.Id == 0 ? "" : (Model.Job.Tractor?.RegistrationNo + " < " + Model.Job.Tractor?.Make?.Name + " " + Model.Job.Tractor?.Model + " " + Model.Job.Tractor?.ModelYear + " " + Model.Job.Tractor?.Color?.Name + " > "));
+		var selectedTrailer = (Model.Job == null || Model.Job.Id == 0 ? "" : (Model.Job.Trailer?.RegistrationNo + " < " + string.Join(" ", (new string[] {Model.Job.Trailer?.VehicleType?.Name, Model.Job.Trailer?.Make?.Name, Model.Job.Trailer?.Model, Model.Job.Trailer?.ModelYear.ToString(), Model.Job.Trailer?.Color?.Name}).Where(x => !string.IsNullOrEmpty(x))) + " > "));
 
-			<text>@Html.Raw("selectedStaffs[" + jobStaff.Id + "] = '" + selectedStaff + "';")</text>
-			<text>@Html.Raw("selectedTractors[" + jobStaff.Id+"] = '" + selectedTractor + "';")</text>
-			<text>@Html.Raw("selectedTrailers[" + jobStaff.Id+"] = '" + selectedTrailer + "';")</text>
-		}
+		<text>@Html.Raw("selectedStaffs[" + Model.Job.Id + "] = '" + selectedStaff + "';")</text>
+		<text>@Html.Raw("selectedTractors[" + Model.Job.Id+"] = '" + selectedTractor + "';")</text>
+		<text>@Html.Raw("selectedTrailers[" + Model.Job.Id+"] = '" + selectedTrailer + "';")</text>
 	}
 
 	function OnStaffDataGridValueChange(e) {

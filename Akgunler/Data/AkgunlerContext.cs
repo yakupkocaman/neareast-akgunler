@@ -40,7 +40,6 @@ namespace Akgunler.Data
 		public DbSet<AccountType> AccountTypes { get; set; }
 		public DbSet<Job> Jobs { get; set; }
 		public DbSet<JobType> JobTypes { get; set; }
-		public DbSet<JobStaff> JobStaffs { get; set; }
 		public DbSet<Freight> Freights { get; set; }
 
 		public DbSet<Staff> Staffs { get; set; }
@@ -85,6 +84,10 @@ namespace Akgunler.Data
 				.HasConversion(
 					v => v.ToString(),
 					v => (DocumentGroup)Enum.Parse(typeof(DocumentGroup), v));
+
+			modelBuilder
+				.Entity<Job>()
+				.HasOne(x => x.Staff);
 
 			foreach (var relationship in modelBuilder.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()))
 			{

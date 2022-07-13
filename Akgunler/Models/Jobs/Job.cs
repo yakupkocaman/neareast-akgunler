@@ -41,12 +41,10 @@ namespace Akgunler.Models.Jobs
 		public virtual Ship DepartureShip { get; set; }
 		public int? ArrivalShipId { get; set; }
 		public virtual Ship ArrivalShip { get; set; }
+		public DateTime? DepartureShipDate { get; set; }
+		public DateTime? ArrivalShipDate { get; set; }
 		public int? CustomsId { get; set; }
 		public Customs Customs { get; set; }
-		[Column(TypeName = "decimal(18,4)")]
-		public decimal ExchangeRateUsd { get; set; }
-		[Column(TypeName = "decimal(18,4)")]
-		public decimal ExchangeRateEur { get; set; }
 		public DateTime? StartDate { get; set; }
 		public DateTime? FinishDate { get; set; }
 		public string Note { get; set; }
@@ -56,8 +54,8 @@ namespace Akgunler.Models.Jobs
 		public bool IsCancelled { get; set; }
 		public bool HasUpdate { get; set; }
 
-		public int StaffId { get; set; }
-		public int TractorId { get; set; }
+		public int? StaffId { get; set; }
+		public int? TractorId { get; set; }
 		public int? TrailerId { get; set; }
 
 		public virtual Staff Staff { get; set; }

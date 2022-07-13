@@ -5,7 +5,6 @@ namespace Akgunler.ViewModels.Jobs
 {
 	public class JobStaffModel
 	{
-		public int JobStaffId { get; set; }
 		public int JobId { get; set; }
 		public int StaffId { get; set; }
 		public int TractorId { get; set; }

@@ -1,4 +1,4 @@
-﻿@page
+﻿@page "{id?}"
 @model ErrorModel
 @{
 	ViewData["Title"] = "Error";
@@ -12,7 +12,7 @@
 		public bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
 
 		[ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-		public void OnGet()
+		public void OnGet(int? id = 0)
 		{
 			RequestId = System.Diagnostics.Activity.Current?.Id ?? HttpContext.TraceIdentifier;
 		}

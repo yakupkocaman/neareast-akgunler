@@ -4,14 +4,16 @@ using Akgunler.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Akgunler.Migrations
 {
     [DbContext(typeof(AkgunlerContext))]
-    partial class AkgunlerContextModelSnapshot : ModelSnapshot
+    [Migration("20220607213324_Update-JobStaff")]
+    partial class UpdateJobStaff
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -808,9 +810,6 @@ namespace Akgunler.Migrations
                     b.Property<int?>("ArrivalPortId")
                         .HasColumnType("int");
 
-                    b.Property<DateTime?>("ArrivalShipDate")
-                        .HasColumnType("datetime2");
-
                     b.Property<int?>("ArrivalShipId")
                         .HasColumnType("int");
 
@@ -831,9 +830,6 @@ namespace Akgunler.Migrations
 
                     b.Property<int?>("DeparturePortId")
                         .HasColumnType("int");
-
-                    b.Property<DateTime?>("DepartureShipDate")
-                        .HasColumnType("datetime2");
 
                     b.Property<int?>("DepartureShipId")
                         .HasColumnType("int");

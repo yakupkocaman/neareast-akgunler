@@ -118,9 +118,11 @@
             var jobs = mContext.Jobs
                 .Include(x => x.Sender)
                 .Include(x => x.Receiver)
-                .Include(x => x.JobStaffs)
-
+                .Include(x => x.Staff)
+                .Include(x => x.Tractor)
+                .Include(x => x.Trailer)
                 .ToList();
+
             /*
             if (SelectedJobStatus == 1)
             {

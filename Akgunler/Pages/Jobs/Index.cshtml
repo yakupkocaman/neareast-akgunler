@@ -19,9 +19,9 @@
         public int CurrentVehicleId;
         public int CurrentStaffId;
         public int CurrentJobTypeId;
-        public DateTime? CurrentStartDate = DateTime.Now.AddDays(-29);
+        public DateTime? CurrentStartDate = DateTime.Now.AddYears(-1);
         public string CurrentStartDateStr;
-        public DateTime? CurrentEndDate = DateTime.Now;
+        public DateTime? CurrentEndDate = DateTime.Now.AddYears(1);
         public string CurrentEndDateStr;
 
         public int TablePageCount => (int)Math.Ceiling((double)TableItemsCount / (double)TableItemCount);
@@ -208,15 +208,29 @@
 			.Alignment(HorizontalAlignment.Left)
 			.Width(60)
             .AllowSorting(false)
+            .CalculateCellValue(@<text>
+                function(data) {
+                    return [data.Id, data.Freights.length > 0]
+                }
+            </text>)
+            .CellTemplate(@<text>
+                <div class="text-right">
+                    <% if (data.Freights && data.Freights.length > 0) { %> 
+                    <i style="font-size: 140%" class="link-icon mdi mdi-call-merge"></i>
+                    <% } %>
+                    <%- data.Id %>
+                </div>
+            </text>)
 			.Caption("Id");
 
-        columns.AddFor(m => m.Sender)
+        columns.AddFor(m => m.StartDate)
             .CssClass("col-middle")
             .EncodeHtml(false)
             .AllowSorting(false)
+			.Width(140)
             .CalculateCellValue(@<text>
                 function(data) {
-                    return [data.StartDate ? moment(data.StartDate).format("MM/DD/YYYY HH:mm") : '', data.FinishDate ? moment(data.FinishDate).format("MM/DD/YYYY HH:mm") : ''].join("<br>")
+                    return [data.StartDate ? moment(data.StartDate).format("DD/MM/YYYY HH:mm") : '', data.FinishDate ? moment(data.FinishDate).format("DD/MM/YYYY HH:mm") : ''].join("<br>")
                 }
             </text>)
 			.Caption("Başlangıç-Bitiş");
@@ -227,67 +241,108 @@
             .AllowSorting(false)
             .CalculateCellValue(@<text>
                 function(data) {
-                    return [data.Sender.Name, data.Receiver.Name].join("<br>")
+                    return [data.Sender?.Name, data.Receiver?.Name].join("<br>")
                 }
             </text>)
 			.Caption("Müşteri");
 
-        columns.AddFor(m => m.JobStaffs)
+        columns.AddFor(m => m.Staff)
             .CssClass("col-middle")
             .EncodeHtml(false)
             .AllowSorting(false)
+			.Width(140)
             .CalculateCellValue(@<text>
                 function(data) {
-                    return data.JobStaffs.map(x => x.Staff.FullName).join("<br>")
+                    if(data.Staff != null) {
+                        return data.Staff?.FullName
+                    }
+                    return '-';
                 }
             </text>)
 			.Caption("Sürücü");
 
-        columns.AddFor(m => m.JobStaffs)
+        columns.AddFor(m => m.Tractor)
+            .CssClass("col-middle")
+            .EncodeHtml(false)
+            .AllowSorting(false)
+			.Width(140)
+            .CalculateCellValue(@<text>
+                function(data) {
+                    var vehicles = [];
+                    var tractor = data.Tractor;
+                    var trailer = data.Trailer;
+                    var vehicle = "";
+
+                    if(tractor) {
+                        if(tractor.RegistrationNo) {
+                            vehicle += tractor.RegistrationNo;
+                        }
+                        if(tractor.Make && tractor.Make.Name) {
+                            vehicle += " " + tractor.Make.Name;
+                        }
+                    }
+
+                    if(vehicle.length > 0) {
+                        vehicles.push(vehicle);
+                    }
+
+                    return vehicles.join("<br>")
+                }
+            </text>)
+			.Caption("Çekici");
+
+        columns.AddFor(m => m.Trailer)
+            .CssClass("col-middle")
+            .EncodeHtml(false)
+            .AllowSorting(false)
+			.Width(140)
+            .CalculateCellValue(@<text>
+                function(data) {
+                    var vehicles = [];
+                    var tractor = data.Tractor;
+                    var trailer = data.Trailer;
+                    var vehicle = "";
+
+                    if(trailer) {
+                        if(trailer.RegistrationNo) {
+                            vehicle += trailer.RegistrationNo;
+                        }
+                        if(trailer.VehicleType && trailer.VehicleType.Name) {
+                            vehicle += " " + trailer.VehicleType.Name;
+                        }
+                    }
+
+                    if(vehicle.length > 0) {
+                        vehicles.push(vehicle);
+                    }
+
+                    return vehicles.join("<br>")
+                }
+            </text>)
+			.Caption("Dorse ");
+        
+        columns.AddFor(m => m.Freights)
             .CssClass("col-middle")
             .EncodeHtml(false)
             .AllowSorting(false)
             .CalculateCellValue(@<text>
                 function(data) {
-                    var vehicles = [];
-                    if(data.JobStaffs && data.JobStaffs.length > 0) {
-                        for(var jobStaff of data.JobStaffs) {
-                            var tractor = jobStaff.Tractor;
-                            var trailer = jobStaff.Trailer;
-                            var vehicle = "";
+                    var freights = [];
+                    var jobFreights = data.Freights;
 
-                            if(tractor) {
-                                if(tractor.RegistrationNo) {
-                                    vehicle += tractor.RegistrationNo;
-                                }
-                                if(tractor.Make && tractor.Make.Name) {
-                                    vehicle += " " + tractor.Make.Name;
-                                }
-                            }
-
-                            if(trailer) {
-                                vehicle += " - ";
-                                if(trailer.RegistrationNo) {
-                                    vehicle += trailer.RegistrationNo;
-                                }
-                                 if(trailer.Make && trailer.Make.Name) {
-                                    vehicle += " " + trailer.Make.Name;
-                                }
-                            }
-
-                            if(vehicle.length > 0) {
-                                vehicles.push(vehicle);
-                            }
+                    if(jobFreights && jobFreights.length > 0) {
+                        for(var jobFreight of jobFreights) {
+                            freights.push(jobFreight.ShippingDistrict?.Province?.Name + " - " + jobFreight.ShippingDistrict?.Name)
                         }
                     }
 
-                    return vehicles.join("<br>")
-                    //return data.JobStaffs.map(x => x.Tractor.?RegistrationNo + " - " + x.Trailer?.VehicleType?.Name).join("<br>")
+                    return freights.join("<br>")
                 }
             </text>)
-			.Caption("Araç");
+			.Caption("Yükleme Yerleri");
 
         columns.AddFor(m => m.Status)
+            .Width(80)
             .CssClass("col-middle")
 			.Caption("Durum");
     })
@@ -308,7 +363,13 @@
 	.ShowRowLines(true)
     .Grouping(g => g.AutoExpandAll(false))
 	.OnSelectionChanged("onSelectionChanged")
+    .OnCellPrepared("onCellPrepared")
 	.NoDataText("Veri bulunamadı")
+)
+
+@(Html.DevExtreme().Tooltip()
+    .ID("tooltip")
+    .Position(Position.Right)
 )
 
 <script>
@@ -316,6 +377,21 @@
         var data = selectedItems.selectedRowsData[0];
         if(data) {
 			window.location.href = baseUrl + "jobs/edit?id=" + data.Id;
+        }
+    }
+
+    function onCellPrepared(e) {
+        if (e.rowType === "data" && e.column.dataField === "Id" && e.data.Freights && e.data.Freights.length > 0) {
+            var tooltipInstance = $("#tooltip").dxTooltip("instance");
+            e.cellElement.mouseover(function (arg) {
+                tooltipInstance.option("contentTemplate", function (contentElement) {
+                    contentElement.html(`<div class='tooltipContent'><b style="font-size: 110%">Parsiyel Yük</b></div>`);
+                });
+                tooltipInstance.show(arg.target);
+            });
+            e.cellElement.mouseout(function (arg) {
+                tooltipInstance.hide();
+            });
         }
     }
 </script>

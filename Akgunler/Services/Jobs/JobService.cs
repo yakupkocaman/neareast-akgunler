@@ -1,15 +1,11 @@
 ﻿using Akgunler.Data;
-using Akgunler.Models.Core;
-using Akgunler.Models.Customers;
 using Akgunler.Models.Jobs;
 using Akgunler.ViewModels.Jobs;
-using Dapper;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
-using System.Threading.Tasks;
 
 namespace Akgunler.Services.Jobs
 {
@@ -21,18 +17,18 @@ namespace Akgunler.Services.Jobs
         {
             mJobRepository = jobRepository;
         }
-        
-        public void Insert(Job job) 
+
+        public void Insert(Job job)
         {
             mJobRepository.Add(job);
             mJobRepository.SaveChange();
         }
 
-        public void Update(Job job) 
+        public void Update(Job job)
         {
             mJobRepository.Update(job);
         }
-        
+
         public bool CheckVersion(int jobId, byte[] jobVersion)
         {
             var currentVersion = mJobRepository.Query()
@@ -69,6 +65,9 @@ namespace Akgunler.Services.Jobs
                 .Include(x => x.DepartureShip)
                 .Include(x => x.ArrivalShip)
                 .Include(x => x.JobType)
+                .Include(x => x.Staff).ThenInclude(x => x.Department)
+                .Include(x => x.Tractor).ThenInclude(x => x.Make)
+                .Include(x => x.Trailer).ThenInclude(x => x.Make)
                 .Where(x => x.Id == jobId && x.DeletedOn == null)
                 .FirstOrDefault();
         }
@@ -83,9 +82,10 @@ namespace Akgunler.Services.Jobs
                 .Include(x => x.DepartureShip)
                 .Include(x => x.ArrivalShip)
                 .Include(x => x.JobType)
-                .Include(x => x.JobStaffs).ThenInclude(x => x.Staff)
-                .Include(x => x.JobStaffs).ThenInclude(x => x.Tractor).ThenInclude(x => x.Make)
-                .Include(x => x.JobStaffs).ThenInclude(x => x.Trailer).ThenInclude(x => x.Make)
+                .Include(x => x.Staff).ThenInclude(x => x.Department)
+                .Include(x => x.Tractor).ThenInclude(x => x.Make)
+                .Include(x => x.Trailer).ThenInclude(x => x.VehicleType)
+                .Include(x => x.Trailer).ThenInclude(x => x.Make)
                 .Where(x => x.DeletedOn == null)
                 .AsNoTracking();
 
@@ -98,17 +98,17 @@ namespace Akgunler.Services.Jobs
             if (status != "waiting" && end.HasValue)
             {
                 end = end.Value.Date.AddDays(1).AddTicks(-1);
-                query = query.Where(x => x.StartDate<= end);
+                query = query.Where(x => x.StartDate <= end);
             }
 
             if (status != "waiting" && vehicleId > 0)
             {
-                query = query.Where(x => x.JobStaffs.Any(x => x.TractorId == vehicleId));
+                query = query.Where(x => x.TractorId == vehicleId);
             }
 
             if (status != "waiting" && staffId > 0)
             {
-                query = query.Where(x => x.JobStaffs.Any(x => x.StaffId == staffId));
+                query = query.Where(x => x.StaffId == staffId);
             }
 
             if (status != "waiting" && jobTypeId > 0)
@@ -120,8 +120,8 @@ namespace Akgunler.Services.Jobs
             {
                 query = query.Where(x => (x.Sender.Name + " " + x.Sender.Title).Contains(search));
                 query = query.Where(x => (x.Receiver.Name + " " + x.Receiver.Title).Contains(search));
-                query = query.Where(x => x.JobStaffs.Any(s => (s.Staff.FirstName + " " + s.Staff.LastName).Contains(search)));
-                query = query.Where(x => x.JobStaffs.Any(s => (s.Tractor.RegistrationNo + " " + s.Tractor.Name).Contains(search)));
+                query = query.Where(x => (x.Staff.FirstName + " " + x.Staff.LastName).Contains(search));
+                query = query.Where(x => (x.Tractor.RegistrationNo + " " + x.Tractor.Name).Contains(search));
             }
 
             if (status == "waiting")
@@ -164,9 +164,11 @@ namespace Akgunler.Services.Jobs
                 .Include(x => x.DepartureShip)
                 .Include(x => x.ArrivalShip)
                 .Include(x => x.JobType)
-                .Include(x => x.JobStaffs).ThenInclude(x => x.Staff)
-                .Include(x => x.JobStaffs).ThenInclude(x => x.Tractor).ThenInclude(x => x.Make)
-                .Include(x => x.JobStaffs).ThenInclude(x => x.Trailer).ThenInclude(x => x.Make)
+                .Include(x => x.Staff).ThenInclude(x => x.Department)
+                .Include(x => x.Tractor).ThenInclude(x => x.Make)
+                .Include(x => x.Trailer).ThenInclude(x => x.VehicleType)
+                .Include(x => x.Trailer).ThenInclude(x => x.Make)
+                .Include(x => x.Freights).ThenInclude(x => x.ShippingDistrict).ThenInclude(x => x.Province)
                 .Where(x => x.DeletedOn == null)
                 .AsNoTracking();
 
@@ -184,12 +186,12 @@ namespace Akgunler.Services.Jobs
 
             if (status != "waiting" && vehicleId > 0)
             {
-                query = query.Where(x => x.JobStaffs.Any(x => x.TractorId == vehicleId));
+                query = query.Where(x => x.TractorId == vehicleId);
             }
 
             if (status != "waiting" && staffId > 0)
             {
-                query = query.Where(x => x.JobStaffs.Any(x => x.StaffId == staffId));
+                query = query.Where(x => x.StaffId == staffId);
             }
 
             if (status != "waiting" && jobTypeId > 0)
@@ -201,8 +203,8 @@ namespace Akgunler.Services.Jobs
             {
                 query = query.Where(x => (x.Sender.Name + " " + x.Sender.Title).Contains(search));
                 query = query.Where(x => (x.Receiver.Name + " " + x.Receiver.Title).Contains(search));
-                query = query.Where(x => x.JobStaffs.Any(s => (s.Staff.FirstName + " " + s.Staff.LastName).Contains(search)));
-                query = query.Where(x => x.JobStaffs.Any(s => (s.Tractor.RegistrationNo + " " + s.Tractor.Name).Contains(search)));
+                query = query.Where(x => (x.Staff.FirstName + " " + x.Staff.LastName).Contains(search));
+                query = query.Where(x => (x.Tractor.RegistrationNo + " " + x.Tractor.Name).Contains(search));
             }
 
             if (status == "waiting")
@@ -231,17 +233,19 @@ namespace Akgunler.Services.Jobs
         public List<Job> GetAllFull(string q = "all")
         {
             var query = mJobRepository.Query()
-               .Include(x => x.Sender)
-               .Include(x => x.Receiver)
+                .Include(x => x.Sender)
+                .Include(x => x.Receiver)
                 .Include(x => x.DeparturePort)
                 .Include(x => x.ArrivalPort)
                 .Include(x => x.DepartureShip)
                 .Include(x => x.ArrivalShip)
-               .Include(x => x.JobType)
-               .Include(x => x.JobStaffs).ThenInclude(x => x.Staff)
-               .Include(x => x.JobStaffs).ThenInclude(x => x.Tractor).ThenInclude(x => x.Make)
-               .Where(x => x.DeletedOn == null)
-               .AsNoTracking();
+                .Include(x => x.JobType)
+                .Include(x => x.Staff).ThenInclude(x => x.Department)
+                .Include(x => x.Tractor).ThenInclude(x => x.Make)
+                .Include(x => x.Trailer).ThenInclude(x => x.VehicleType)
+                .Include(x => x.Trailer).ThenInclude(x => x.Make)
+                .Where(x => x.DeletedOn == null)
+                .AsNoTracking();
 
             if (q == "waiting")
             {
@@ -269,61 +273,6 @@ namespace Akgunler.Services.Jobs
 
             return result;
         }
-
-        /*
-        public VehicleJobModel GetVehicleJobs(DateTime startDate, DateTime endDate, JobReportStatus reportStatus)
-        {
-            var sql = @"SELECT 
-							RegistrationNo, Model, ModelYear,
-							COUNT(VehicleId) JobCount,
-							SUM(Duration) Duration,
-							SUM(Mileage) Mileage,
-							SUM(TotalGbp) TotalGbp,
-							SUM(TotalUsd) TotalUsd,
-							SUM(TotalEur) TotalEur,
-							SUM(TotalTry) TotalTry
-						FROM
-						(
-							SELECT 
-								VV.VehicleId,
-								VV.RegistrationNo,
-								VV.Model,
-								VV.ModelYear,
-								DATEDIFF(SECOND, JJ.StartDate, JJ.FinishDate) Duration,
-								(JJS.FinishVehicleMileage - JJS.StartVehicleMileage) Mileage,
-								(SELECT SUM(JA.Debit - JA.Credit) FROM Job.Account JA WHERE JA.JobId = JJ.JobId AND JA.CurrencyId = 1) TotalGbp,
-								(SELECT SUM(JA.Debit - JA.Credit) FROM Job.Account JA WHERE JA.JobId = JJ.JobId AND JA.CurrencyId = 2) TotalUsd,
-								(SELECT SUM(JA.Debit - JA.Credit) FROM Job.Account JA WHERE JA.JobId = JJ.JobId AND JA.CurrencyId = 3) TotalEur,
-								(SELECT SUM(JA.Debit - JA.Credit) FROM Job.Account JA WHERE JA.JobId = JJ.JobId AND JA.CurrencyId = 4) TotalTry
-							FROM Job.JobStaff JJS
-							LEFT JOIN Job.Job JJ ON JJS.JobId = JJ.JobId
-							LEFT JOIN Vehicle.Vehicle VV ON JJS.VehicleId = VV.VehicleId
-							LEFT JOIN Staff.Staff SS ON JJS.StaffId = SS.StaffId
-							WHERE 
-								JJ.JobTypeId = 4
-								@reportStatusCondition
-						) JJSQ
-						GROUP BY JJSQ.VehicleId, RegistrationNo,  Model, ModelYear";
-
-            string reportStatusCondition = "";
-
-            if (reportStatus == JobReportStatus.Waiting)
-            {
-                reportStatusCondition = "AND JJ.StartDate > @startDate";
-            }
-            else if (reportStatus == JobReportStatus.Started)
-            {
-                reportStatusCondition = "AND JJ.StartDate <= @startDate AND JJ.FinishDate > @endDate";
-            }
-            else if (reportStatus == JobReportStatus.Finished)
-            {
-                reportStatusCondition = "AND JJ.FinishDate < @endDate";
-            }
-
-            return One<VehicleJobModel>(sql, new { reportStatusCondition, startDate, endDate });
-        }
-		*/
-
     }
 
     public interface IJobService

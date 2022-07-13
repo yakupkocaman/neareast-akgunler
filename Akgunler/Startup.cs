@@ -96,7 +96,6 @@ namespace Akgunler
 			services.AddTransient(typeof(IAccountService), typeof(AccountService));
 			services.AddTransient(typeof(IFreightService), typeof(FreightService));
 			services.AddTransient(typeof(IJobService), typeof(JobService));
-			services.AddTransient(typeof(IJobStaffService), typeof(JobStaffService));
 
 			services.AddTransient(typeof(IStaffService), typeof(StaffService));
 			services.AddTransient(typeof(IStaffDocumentService), typeof(StaffDocumentService));

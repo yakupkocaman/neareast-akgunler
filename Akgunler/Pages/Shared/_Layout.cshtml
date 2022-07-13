@@ -17,7 +17,9 @@
             appPath += "/";
         }
 
-        //appPath += "akgunler/";
+        #if !DEBUG
+        appPath += "akgunler/";
+        #endif
 
         return appPath;
     }
@@ -49,16 +51,6 @@
     <script type="text/javascript">
         var baseUrl = "@GetBaseUrl()";
     </script>
-
-
-    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/v/bs4/dt-1.10.18/datatables.min.css" />
-    <script type="text/javascript" src="https://cdn.datatables.net/v/bs4/dt-1.10.18/datatables.min.js"></script>
-    <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
-
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.min.js"></script>
-    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
-
 
     <link rel="shortcut icon" type="image/x-icon" href="~/img/icon/favicon.ico" />
     <link rel="icon" type="image/png" sizes="16x16" href="~/img/icon/favicon-16x16.png" />

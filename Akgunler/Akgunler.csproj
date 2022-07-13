@@ -4,11 +4,9 @@
     <TypeScriptToolsVersion>2.9</TypeScriptToolsVersion>
   </PropertyGroup>
   <ItemGroup>
-    <None Remove="Pages\IndexOld.txt" />
     <None Remove="Pages\Reports\StaffJob.cshtmlx" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Pages\IndexOld.txt" />
     <Content Include="Pages\Reports\StaffJob.cshtmlx" />
   </ItemGroup>
   <ItemGroup>

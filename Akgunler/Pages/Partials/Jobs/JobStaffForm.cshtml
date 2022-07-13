@@ -2,7 +2,6 @@
 
 <form id="create-jobstaff-form">
 	@Html.HiddenFor(m => m.JobId)
-	@Html.HiddenFor(m => m.JobStaffId)
 	@(Html.DevExtreme().Form<JobStaffModel>()
 		.Width(600)
 		.Items(items =>
@@ -62,35 +61,6 @@
 <hr />
 <div class="text-center mt-3">
 	@(Html.DevExtreme().Button()
-		.Text("Sil")
-		.Type(ButtonType.Danger)
-		.OnClick(@<text>
-			function() { 
-
-				swal({
-					title: "Uyarı!",
-					text: "Silmek istediğinize emin misiniz?",
-					icon: "warning",
-					buttons: true,
-					dangerMode: true,
-				})
-				.then((willDelete) => {
-					if (willDelete) {
-						var jobstaffId = $('[name="JobStaffId"]').val();
-						var url = baseUrl + "api/jobstaff/delete/" + jobstaffId;
-						
-						$.post(url, {}).done(
-							function(d){
-								location.reload();
-							}	
-						);
-					} 
-				});
-			}
-		</text>)
-		.Width(60)
-	)
-	@(Html.DevExtreme().Button()
 		.Text("Vazgeç")
 		.Type(ButtonType.Normal)
 		.Width(130)
@@ -104,8 +74,8 @@
 			function() { 
 				var data = $('#create-jobstaff-form').serialize();
 
-				var jobstaffId = $('[name="JobStaffId"]').val();
-				var url = baseUrl + "api/jobstaff/" + (jobstaffId > 0 ? "update/" + jobstaffId : "create");
+				var jobstaffId = $('[name="JobId"]').val();
+				var url = baseUrl + "api/job/update/" + jobstaffId;
 						
 				$.post(url, data).done(
 					function(d){
